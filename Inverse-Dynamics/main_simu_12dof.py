@@ -48,11 +48,12 @@ robotId = p.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
 
 # Disable default motor control for revolute joints
 revoluteJointIndices = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
-p.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlMode=p.VELOCITY_CONTROL, targetVelocities=[
-                            0.0 for m in revoluteJointIndices], forces=[0.0 for m in revoluteJointIndices])
+p.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlMode=p.VELOCITY_CONTROL,
+                            targetVelocities=[0.0 for m in revoluteJointIndices],
+                            forces=[0.0 for m in revoluteJointIndices])
 
 # Initialize the robot in a specific configuration
-#p.resetJointStatesMultiDof(robotId, revoluteJointIndices, q0)
+p.resetJointStatesMultiDof(robotId, revoluteJointIndices, q0[7:])
 
 # Enable torque control for revolute joints
 jointTorques = [0.0 for m in revoluteJointIndices]
@@ -96,10 +97,16 @@ for i in range(N_SIMULATION):
     vmes12 = np.concatenate((vmes8[:6], np.matrix([0.]), vmes8[6:8], np.matrix(
         [0.]), vmes8[8:10], np.matrix([0.]), vmes8[10:12], np.matrix([0.]), vmes8[12:14]))
 
+    # Joints configuration and velocity vector for free-flyer + 12 dof
+    """qmes12 = np.vstack((np.array([baseState[0]]).T,
+                        np.array([[jointStates[i_joint][0] for i_joint in range(len(jointStates))]]))
+    vmes12 = np.vstack((np.zeros((6, 1)),
+                      [jointStates[i_joint][1] for i_joint in range(len(jointStates))]))"""
+
     ####################################################################
     #                Select the appropriate controller 				   #
-    #								&								   #
-    #				Load the joint torques into the robot			   #
+    #                               &								   #
+    #               Load the joint torques into the robot			   #
     ####################################################################
 
     # If the limit bounds are reached, controller is switched to a pure derivative controller
@@ -108,16 +115,17 @@ for i in range(N_SIMULATION):
         myController = mySafetyController
 
     # If the simulation time is too long, controller is switched to a zero torques controller
-    time_error = time_error or (time.time()-time_start > 0.001)
+    time_error = time_error or (time.time()-time_start > 0.01)
     if (time_error):
         print("Computation time lasted to long. Switch to a zero torque control")
         myController = myEmergencyStop
 
     # Retrieve the joint torques from the appropriate controller
-    jointTorques = np.zeros((12, 1))  # myController.control(qmes12, vmes12, t)  #  
+    jointTorques = myController.control(qmes12, vmes12, t).reshape((12, 1))
 
     # Set control torque for all joints
-    p.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=p.TORQUE_CONTROL, forces=jointTorques)
+    p.setJointMotorControlArray(robotId, revoluteJointIndices,
+                                controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
     # Compute one step of simulation
     p.stepSimulation()

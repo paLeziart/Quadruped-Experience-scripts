@@ -160,14 +160,14 @@ class controller:
         D = 0.2
         torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
-        torques8 = np.concatenate((torques12[1:3], torques12[4:6], torques12[7:9], torques12[10:12]))
+        # torques8 = np.concatenate((torques12[1:3], torques12[4:6], torques12[7:9], torques12[10:12]))
 
         # Saturation to limit the maximal torque
         t_max = 2.5
-        tau = np.maximum(np.minimum(torques8, t_max * np.ones((8, 1))), -t_max * np.ones((8, 1)))
+        tau = np.maximum(np.minimum(torques12, t_max * np.ones((12, 1))), -t_max * np.ones((12, 1)))
 
-        self.error = self.error or (self.sol.status != 0) or (qmes12[8] < -np.pi/2) or (qmes12[11] < -np.pi/2) or (qmes12[14] < -np.pi/2) or (
-            qmes12[17] < -np.pi/2) or (qmes12[8] > np.pi/2) or (qmes12[11] > np.pi/2) or (qmes12[14] > np.pi/2) or (qmes12[17] > np.pi/2)
+        # self.error = self.error or (self.sol.status != 0) or (qmes12[8] < -np.pi/2) or (qmes12[11] < -np.pi/2) or (qmes12[14] < -np.pi/2) or (
+        #    qmes12[17] < -np.pi/2) or (qmes12[8] > np.pi/2) or (qmes12[11] > np.pi/2) or (qmes12[14] > np.pi/2) or (qmes12[17] > np.pi/2)
 
         return tau.flatten()
 
