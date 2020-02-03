@@ -8,7 +8,7 @@ import pinocchio as pin
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_contacts_and_posture_controller import controller, dt, q0, omega
+from TSID_MPC_controller import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 
@@ -17,7 +17,7 @@ import EmergencyStop_controller
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 10000  # number of time steps simulated
+N_SIMULATION = 20000  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -41,7 +41,7 @@ planeId = p.loadURDF("plane.urdf")
 p.setGravity(0, 0, -9.81)
 
 # Load Quadruped robot
-robotStartPos = [0, 0, 0.5]
+robotStartPos = [0, 0, 0.335]
 robotStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
 p.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
 robotId = p.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
@@ -60,7 +60,7 @@ jointTorques = [0.0 for m in revoluteJointIndices]
 p.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
 # Fix the base in the world frame
-#p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.5])
+# p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.5])
 
 # Set time step for the simulation
 p.setTimeStep(dt)
@@ -86,22 +86,22 @@ for i in range(N_SIMULATION):
     baseState = p.getBasePositionAndOrientation(robotId)
 
     # Joints configuration and velocity vector
-    qmes8 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T, np.array(
+    """qmes8 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T, np.array(
         [[jointStates[i_joint][0] for i_joint in range(len(jointStates))]]).T))
     vmes8 = np.vstack((np.zeros((6, 1)), np.array(
-        [[jointStates[i_joint][1] for i_joint in range(len(jointStates))]]).T))
+        [[jointStates[i_joint][1] for i_joint in range(len(jointStates))]]).T))"""
 
     # Conversion (from 8 to 12 DOF) for TSID computation
-    qmes12 = np.concatenate((qmes8[:7], np.matrix([0.]), qmes8[7:9], np.matrix(
-        [0.]), qmes8[9:11], np.matrix([0.]), qmes8[11:13], np.matrix([0.]), qmes8[13:15]))
-    vmes12 = np.concatenate((vmes8[:6], np.matrix([0.]), vmes8[6:8], np.matrix(
-        [0.]), vmes8[8:10], np.matrix([0.]), vmes8[10:12], np.matrix([0.]), vmes8[12:14]))
+    """qmes12 = np.concatenate((qmes8[:7], np.matrix([0.]), qmes8[8:10], np.matrix(
+        [0.]), qmes8[11:13], np.matrix([0.]), qmes8[14:16], np.matrix([0.]), qmes8[17:19]))
+    vmes12 = np.concatenate((vmes8[:6], np.matrix([0.]), vmes8[7:9], np.matrix(
+        [0.]), vmes8[10:12], np.matrix([0.]), vmes8[13:15], np.matrix([0.]), vmes8[16:18]))"""
 
     # Joints configuration and velocity vector for free-flyer + 12 dof
-    """qmes12 = np.vstack((np.array([baseState[0]]).T,
-                        np.array([[jointStates[i_joint][0] for i_joint in range(len(jointStates))]]))
+    qmes12 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T,
+                        np.array([[jointStates[i_joint][0] for i_joint in range(len(jointStates))]]).T))
     vmes12 = np.vstack((np.zeros((6, 1)),
-                      [jointStates[i_joint][1] for i_joint in range(len(jointStates))]))"""
+                        np.array([[jointStates[i_joint][1] for i_joint in range(len(jointStates))]]).T))
 
     ####################################################################
     #                Select the appropriate controller 				   #
