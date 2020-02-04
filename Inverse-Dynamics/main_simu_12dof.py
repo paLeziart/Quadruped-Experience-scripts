@@ -137,6 +137,9 @@ for i in range(N_SIMULATION):
 
     t_list.append(time_spent)
 
+    if i % 25 == 0:
+        a = 1
+
 # Plot the tracking of the trajectories
 
 plt.figure(1)
