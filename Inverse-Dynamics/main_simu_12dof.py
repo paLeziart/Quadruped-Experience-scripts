@@ -41,7 +41,7 @@ planeId = p.loadURDF("plane.urdf")
 p.setGravity(0, 0, -9.81)
 
 # Load Quadruped robot
-robotStartPos = [0, 0, 0.335]
+robotStartPos = [0, 0, 0.34]
 robotStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
 p.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
 robotId = p.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
