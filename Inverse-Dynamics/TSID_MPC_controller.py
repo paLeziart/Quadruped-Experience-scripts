@@ -43,14 +43,14 @@ class controller:
         w_forceRef = 1e-3		# weight of the forces regularization
         kp_contact = 0.0		# proportionnal gain for the contacts
 
-        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT', 'FR_FOOT']  # tab with all the foot frames names
+        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT']  # tab with all the foot frames names
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         kp_com = 1000.0
-        w_com = 1000.0
+        w_com = 0.0
 
         kp_foot = 2000.0
-        w_foot = 0.0
+        w_foot = 1.0
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -82,6 +82,7 @@ class controller:
         self.postureTask = tsid.TaskJointPosture("task-posture", self.robot)
         self.postureTask.setKp(kp_posture * matlib.ones(self.robot.nv-6).T)  # Proportional gain
         self.postureTask.setKd(2.0 * np.sqrt(kp_posture) * matlib.ones(self.robot.nv-6).T)  # Derivative gain
+        self.postureTask.mask(np.matrix([[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1]]).T)
         # Add the task to the HQP with weight = w_posture, priority level = 0 (as real constraint) and a transition duration = 0.0
         self.invdyn.addMotionTask(self.postureTask, w_posture, 1, 0.0)
 
@@ -97,7 +98,7 @@ class controller:
         self.invdyn.addMotionTask(self.lockTask, w_lock, 0, 0.0)"""
 
         # CONTACTS CONSTRAINTS
-        self.contacts = 4*[None]
+        self.contacts = 3*[None]
         for i, name in enumerate(foot_frames):
             self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
             self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
@@ -115,8 +116,10 @@ class controller:
 
         # FOOT MOTION TASK
         self.FRfootTask = tsid.TaskSE3Equality("FR-foot-placement", self.robot, 'FR_FOOT')
-        self.FRfootTask.setKp(kp_foot * matlib.ones(6).T)
-        self.FRfootTask.setKd(2.0 * np.sqrt(kp_foot) * matlib.ones(6).T)
+        #     # ignore rotation for contact points
+        mask = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).T
+        self.FRfootTask.setKp(kp_foot * mask)  # matlib.ones(6).T)
+        self.FRfootTask.setKd(2.0 * np.sqrt(kp_foot) * mask)  # matlib.ones(6).T)
         # set a mask allowing only the transation upon x and z-axis
         # self.FRfootTask.setMask(np.matrix([[1, 0, 1, 0, 0, 0]]).T)
         self.FRfootTask.useLocalFrame(False)
@@ -179,21 +182,38 @@ class controller:
     def control(self, qmes12, vmes12, t):
 
         # Set TSID state to the state of PyBullet simulation
-        self.qdes[:7] = qmes12[:7]
+        self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
+        self.qdes[2:7] = qmes12[2:7]  # Keep height and orientation
         self.vdes[:6] = vmes12[:6]
 
         # Update frame placements
         # pin.forwardKinematics(self.model, self.data, self.qdes, self.vdes)
         # pin.updateFramePlacements(self.model, self.data)
 
-        if False:
-            self.FR_foot_goal.translation = np.matrix(
+        if True:
+            """self.FR_foot_goal.translation = np.matrix(
                 [self.FR_foot_goal.translation[0, 0],
                  self.FR_foot_goal.translation[1, 0],
-                 self.FR_foot_goal.translation[2, 0] + 0.0001]).T
+                 self.FR_foot_goal.translation[2, 0] + 0.00001]).T
             self.trajFRfoot = tsid.TrajectorySE3Constant("traj_FR_foot", self.FR_foot_goal)
-            self.sampleFoot = self.trajFRfoot.computeNext()
+            self.sampleFoot = self.trajFRfoot.computeNext()"""
+
+            # Target SE3 for the foot (position/orientation) in world frame
+            goal_x = (0.19 + 0.05 * np.sin(2*3.1415*1*t)) * np.min((1.0, t)) + \
+                self.FRfootTask.position[0, 0] * (1.0 - np.min((1.0, t)))
+            goal_y = -0.15 * np.min((1.0, t)) + self.FRfootTask.position[1, 0] * (1.0 - np.min((1.0, t)))
+            goal_z = (0.1 + 0.03 * np.sin(2*3.1415*1*t)) * np.min((1.0, t)) + \
+                self.FRfootTask.position[2, 0] * (1 - np.min((1.0, t)))
+
+            # Set the updated target SE3 as reference for the tracking task
+            self.sampleFoot.pos(np.matrix([goal_x, goal_y, goal_z,
+                                           1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+            self.sampleFoot.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
+            self.sampleFoot.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
             self.FRfootTask.setReference(self.sampleFoot)
+
+            # pos_foot = self.robot.framePosition(self.data, self.model.getFrameId('FR_FOOT'))
+            # print("FOOT: ", pos_foot.translation.T)
 
         if False:
             pos_base = self.robot.framePosition(self.data, self.model.getFrameId('base_link'))
@@ -231,7 +251,10 @@ class controller:
         self.vdes += self.ades * dt
         self.qdes = pin.integrate(self.model, self.qdes, self.vdes * dt)
 
-        print("BASE: ", self.qdes[0:3].T)
+        # print("BASE: ", self.qdes[0:3].T)
+        """print("Position: ", self.FRfootTask.position[0:3].T)
+        print("Target:   ", self.FRfootTask.position_ref[0:3].T)
+        print("Error:    ", self.FRfootTask.position_error[0:3].T)"""
 
         # Torque PD controller
         P = 50

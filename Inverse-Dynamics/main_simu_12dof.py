@@ -17,7 +17,7 @@ import EmergencyStop_controller
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 20000  # number of time steps simulated
+N_SIMULATION = 10000  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -60,7 +60,7 @@ jointTorques = [0.0 for m in revoluteJointIndices]
 p.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
 # Fix the base in the world frame
-# p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.5])
+p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
 
 # Set time step for the simulation
 p.setTimeStep(dt)
@@ -137,7 +137,7 @@ for i in range(N_SIMULATION):
 
     t_list.append(time_spent)
 
-    if i % 25 == 0:
+    if i % 250 == 0:
         a = 1
 
 # Plot the tracking of the trajectories
