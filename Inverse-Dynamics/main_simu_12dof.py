@@ -11,13 +11,14 @@ import matplotlib.pylab as plt
 from TSID_MPC_controller import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
+import ForceMonitor
 
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 10000  # number of time steps simulated
+N_SIMULATION = 20000  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -60,7 +61,7 @@ jointTorques = [0.0 for m in revoluteJointIndices]
 p.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
 # Fix the base in the world frame
-p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
+# p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
 
 # Set time step for the simulation
 p.setTimeStep(dt)
@@ -73,6 +74,7 @@ p.setTimeStep(dt)
 myController = controller(q0, omega, t)
 mySafetyController = Safety_controller.controller_12dof()
 myEmergencyStop = EmergencyStop_controller.controller_12dof()
+myForceMonitor = ForceMonitor.ForceMonitor(p, robotId, planeId)
 
 for i in range(N_SIMULATION):
 
@@ -136,6 +138,8 @@ for i in range(N_SIMULATION):
     time_spent = time.time() - time_start
 
     t_list.append(time_spent)
+
+    myForceMonitor.display_contact_forces()
 
     if i % 250 == 0:
         a = 1

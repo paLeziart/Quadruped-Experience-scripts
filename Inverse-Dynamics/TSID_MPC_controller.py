@@ -30,7 +30,7 @@ class controller:
         self.error = False
 
         kp_posture = 10.0		# proportionnal gain of the posture task
-        w_posture = 1.0			# weight of the posture task
+        w_posture = 10.0			# weight of the posture task
 
         kp_lock = 0.0			# proportionnal gain of the lock task
         w_lock = 0.0			# weight of the lock task
@@ -43,11 +43,11 @@ class controller:
         w_forceRef = 1e-3		# weight of the forces regularization
         kp_contact = 0.0		# proportionnal gain for the contacts
 
-        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT']  # tab with all the foot frames names
+        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT', 'FR_FOOT']  # tab with all the foot frames names
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         kp_com = 1000.0
-        w_com = 0.0
+        w_com = 100.0
 
         kp_foot = 2000.0
         w_foot = 1.0
@@ -82,7 +82,7 @@ class controller:
         self.postureTask = tsid.TaskJointPosture("task-posture", self.robot)
         self.postureTask.setKp(kp_posture * matlib.ones(self.robot.nv-6).T)  # Proportional gain
         self.postureTask.setKd(2.0 * np.sqrt(kp_posture) * matlib.ones(self.robot.nv-6).T)  # Derivative gain
-        self.postureTask.mask(np.matrix([[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1]]).T)
+        #self.postureTask.mask(np.matrix([[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1]]).T)
         # Add the task to the HQP with weight = w_posture, priority level = 0 (as real constraint) and a transition duration = 0.0
         self.invdyn.addMotionTask(self.postureTask, w_posture, 1, 0.0)
 
@@ -98,7 +98,7 @@ class controller:
         self.invdyn.addMotionTask(self.lockTask, w_lock, 0, 0.0)"""
 
         # CONTACTS CONSTRAINTS
-        self.contacts = 3*[None]
+        self.contacts = 4*[None]
         for i, name in enumerate(foot_frames):
             self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
             self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
@@ -106,13 +106,16 @@ class controller:
             H_ref = self.robot.framePosition(self.data, self.model.getFrameId(name))
             self.contacts[i].setReference(H_ref)
             self.contacts[i].useLocalFrame(False)
+            if i == 3:
+                self.contacts[i].setForceReference(np.matrix([0.0, 0.0, 2.2 * 9.81 * 0.35]).T)
+                self.contacts[i].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
             self.invdyn.addRigidContact(self.contacts[i], w_forceRef, 1.0, 1)
 
         # CENTER OF MASS TASK
         self.comTask = tsid.TaskComEquality("task-com", self.robot)
         self.comTask.setKp(kp_com * matlib.ones(3).T)
         self.comTask.setKd(2.0 * np.sqrt(kp_com) * matlib.ones(3).T)
-        self.invdyn.addMotionTask(self.comTask, w_com, 1, 0.0)
+        #self.invdyn.addMotionTask(self.comTask, w_com, 1, 0.0)
 
         # FOOT MOTION TASK
         self.FRfootTask = tsid.TaskSE3Equality("FR-foot-placement", self.robot, 'FR_FOOT')
@@ -124,7 +127,7 @@ class controller:
         # self.FRfootTask.setMask(np.matrix([[1, 0, 1, 0, 0, 0]]).T)
         self.FRfootTask.useLocalFrame(False)
         # Add the task to the HQP with weight = w_foot, priority level = 0 (as real constraint) and a transition duration = 0.0
-        self.invdyn.addMotionTask(self.FRfootTask, w_foot, 1, 0.0)
+        #self.invdyn.addMotionTask(self.FRfootTask, w_foot, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory objects and linking them to the tasks)
 
@@ -185,7 +188,9 @@ class controller:
         self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
         self.qdes[2:7] = qmes12[2:7]  # Keep height and orientation
         self.vdes[:6] = vmes12[:6]
-
+        self.vdes = vmes12
+        self.qdes = qmes12
+        self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
         # Update frame placements
         # pin.forwardKinematics(self.model, self.data, self.qdes, self.vdes)
         # pin.updateFramePlacements(self.model, self.data)
@@ -257,8 +262,8 @@ class controller:
         print("Error:    ", self.FRfootTask.position_error[0:3].T)"""
 
         # Torque PD controller
-        P = 50
-        D = 0.2
+        P = 0  # 50
+        D = 0  # 0.2
         torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
         # Saturation to limit the maximal torque
