@@ -45,6 +45,9 @@ class ForceMonitor:
         # Display debug lines for contact forces visualization
         i_line = 0
         # print(len(self.lines))
+        f_x = 0
+        f_y = 0
+        f_z = 0
         f_tmp = [0.0] * 3
         for contact in contactPoints:
             if not isinstance(contact, int):  # type(contact) != type(0):
@@ -61,6 +64,10 @@ class ForceMonitor:
                 else:
                     print("Link ", contact[3], "| Contact force: (", f_tmp[0], ", ", f_tmp[1], ", ", f_tmp[2], ")")
 
+                f_x += f_tmp[0]
+                f_y += f_tmp[1]
+                f_z += f_tmp[2]
+
                 if (i_line+1) > len(self.lines):  # If not enough existing lines in line storage a new item is created
                     lineID = self.pyb_simu.addUserDebugLine(start, end, lineColorRGB=[1.0, 0.0, 0.0], lineWidth=8)
                     self.lines.append(lineID)
@@ -68,6 +75,8 @@ class ForceMonitor:
                     self.lines[i_line] = self.pyb_simu.addUserDebugLine(start, end, lineColorRGB=[
                         1.0, 0.0, 0.0], lineWidth=8, replaceItemUniqueId=self.lines[i_line])
                 i_line += 1
+
+        print("Total ground reaction force: (", f_x, ", ", f_y, ", ", f_z, ")")  # Should be around 21,5 (2.2 kg * 9.81 m^2/s)
 
         for i_zero in range(i_line, len(self.lines)):
             self.lines[i_zero] = self.pyb_simu.addUserDebugLine([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], lineColorRGB=[

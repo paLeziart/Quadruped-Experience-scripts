@@ -30,7 +30,7 @@ class controller:
         self.error = False
 
         kp_posture = 10.0		# proportionnal gain of the posture task
-        w_posture = 10.0			# weight of the posture task
+        w_posture = 1.0			# weight of the posture task
 
         kp_lock = 0.0			# proportionnal gain of the lock task
         w_lock = 0.0			# weight of the lock task
@@ -40,17 +40,17 @@ class controller:
         fMin = 1.0				# minimum normal force
         fMax = 100.0  			# maximum normal force
 
-        w_forceRef = 1e-3		# weight of the forces regularization
-        kp_contact = 0.0		# proportionnal gain for the contacts
+        w_forceRef = 10		# weight of the forces regularization
+        kp_contact = 1000.0		# proportionnal gain for the contacts
 
-        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT', 'FR_FOOT']  # tab with all the foot frames names
+        foot_frames = ['HL_FOOT', 'HR_FOOT', 'FL_FOOT']  # tab with all the foot frames names
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
-        kp_com = 1000.0
-        w_com = 100.0
+        kp_com = 10.0
+        w_com = 1.0
 
         kp_foot = 2000.0
-        w_foot = 1.0
+        w_foot = 300.0
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -58,7 +58,7 @@ class controller:
 
         # Set the paths where the urdf and srdf file of the robot are registered
 
-        modelPath = "/opt/openrobots/lib/python3.5/site-packages/../../../share/example-robot-data/robots"
+        modelPath = "/opt/openrobots/share/example-robot-data/robots"
         urdf = modelPath + "/solo_description/robots/solo12.urdf"
         srdf = modelPath + "/solo_description/srdf/solo.srdf"
         vector = pin.StdVec_StdString()
@@ -76,62 +76,19 @@ class controller:
         # Get the initial data
         self.data = self.invdyn.data()
 
-        # Task definition (creating the task objects)
+        #####################
+        # LEGS POSTURE TASK #
+        #####################
 
-        # POSTURE TASK
+        # Task definition (creating the task object)
         self.postureTask = tsid.TaskJointPosture("task-posture", self.robot)
         self.postureTask.setKp(kp_posture * matlib.ones(self.robot.nv-6).T)  # Proportional gain
         self.postureTask.setKd(2.0 * np.sqrt(kp_posture) * matlib.ones(self.robot.nv-6).T)  # Derivative gain
-        #self.postureTask.mask(np.matrix([[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1]]).T)
+        # self.postureTask.mask(np.matrix([[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1]]).T)
         # Add the task to the HQP with weight = w_posture, priority level = 0 (as real constraint) and a transition duration = 0.0
         self.invdyn.addMotionTask(self.postureTask, w_posture, 1, 0.0)
 
-        # LOCK TASK
-        """self.lockTask = tsid.TaskJointPosture("task-lock-shoulder", self.robot)
-        self.lockTask.setKp(kp_lock * matlib.ones(self.robot.nv-6).T)
-        self.lockTask.setKd(2.0 * np.sqrt(kp_lock) * matlib.ones(self.robot.nv-6).T)
-        mask = np.matrix(np.zeros(self.robot.nv-6))  # Add a mask to take into account only the shoulders joints
-        for i in [0, 3, 6, 9]:
-            mask[0, i] = 1
-        self.lockTask.mask(mask.T)
-        # Add the task as real constraint (priority level = 0)
-        self.invdyn.addMotionTask(self.lockTask, w_lock, 0, 0.0)"""
-
-        # CONTACTS CONSTRAINTS
-        self.contacts = 4*[None]
-        for i, name in enumerate(foot_frames):
-            self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
-            self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
-            self.contacts[i].setKd(2.0 * np.sqrt(kp_contact) * matlib.ones(3).T)
-            H_ref = self.robot.framePosition(self.data, self.model.getFrameId(name))
-            self.contacts[i].setReference(H_ref)
-            self.contacts[i].useLocalFrame(False)
-            if i == 3:
-                self.contacts[i].setForceReference(np.matrix([0.0, 0.0, 2.2 * 9.81 * 0.35]).T)
-                self.contacts[i].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
-            self.invdyn.addRigidContact(self.contacts[i], w_forceRef, 1.0, 1)
-
-        # CENTER OF MASS TASK
-        self.comTask = tsid.TaskComEquality("task-com", self.robot)
-        self.comTask.setKp(kp_com * matlib.ones(3).T)
-        self.comTask.setKd(2.0 * np.sqrt(kp_com) * matlib.ones(3).T)
-        #self.invdyn.addMotionTask(self.comTask, w_com, 1, 0.0)
-
-        # FOOT MOTION TASK
-        self.FRfootTask = tsid.TaskSE3Equality("FR-foot-placement", self.robot, 'FR_FOOT')
-        #     # ignore rotation for contact points
-        mask = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).T
-        self.FRfootTask.setKp(kp_foot * mask)  # matlib.ones(6).T)
-        self.FRfootTask.setKd(2.0 * np.sqrt(kp_foot) * mask)  # matlib.ones(6).T)
-        # set a mask allowing only the transation upon x and z-axis
-        # self.FRfootTask.setMask(np.matrix([[1, 0, 1, 0, 0, 0]]).T)
-        self.FRfootTask.useLocalFrame(False)
-        # Add the task to the HQP with weight = w_foot, priority level = 0 (as real constraint) and a transition duration = 0.0
-        #self.invdyn.addMotionTask(self.FRfootTask, w_foot, 1, 0.0)
-
-        # TSID Trajectory (creating the trajectory objects and linking them to the tasks)
-
-        # POSTURE TRAJECTORY
+        # TSID Trajectory (creating the trajectory object and linking it to the task)
         pin.loadReferenceConfigurations(self.model, srdf, False)
         self.q_ref = self.model.referenceConfigurations['straight_standing']
         self.trajPosture = tsid.TrajectoryEuclidianConstant("traj_joint", self.q_ref[7:])
@@ -139,30 +96,99 @@ class controller:
         self.samplePosture = self.trajPosture.computeNext()
         self.postureTask.setReference(self.samplePosture)
 
-        # LOCK TRAJECTORY
-        # The mask is enough to set the shoulder acceleration to 0 because 0 is the initial configuration for the shoulders
-        """trajLock = tsid.TrajectoryEuclidianConstant("traj_lock_shoulder", self.q_ref[7:])
-        sampleLock = trajLock.computeNext()
-        self.lockTask.setReference(sampleLock)
-        self.q0_FR_KFE = self.q_ref[12].copy()  # configuration value of the FR_KFE joint"""
+        # Start in reference configuration
+        self.qdes = self.q_ref
 
-        # CENTER OF MASS TRAJECTORY
+        ######################
+        # TRUNK POSTURE TASK #
+        ######################
+
+        """
+        # Task definition (creating the task object)
+        self.comTask = tsid.TaskComEquality("task-com", self.robot)
+        mask = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T
+        self.comTask.setKp(kp_com * mask)
+        self.comTask.setKd(2.0 * np.sqrt(kp_com) * mask)
+        self.invdyn.addMotionTask(self.comTask, w_com, 1, 0.0)
+
+        # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.com_ref = self.robot.com(self.data)
         self.trajCom = tsid.TrajectoryEuclidianConstant("traj_com", self.com_ref)
         self.sampleCom = self.trajCom.computeNext()
-        self.sampleCom.pos(np.matrix([0.0, 0.0, 0.28]).T)
+        self.sampleCom.pos(np.matrix([0.0, 0.0, 0.0]).T)
         self.sampleCom.vel(np.matrix([0.0, 0.0, 0.0]).T)
         self.sampleCom.acc(np.matrix([0.0, 0.0, 0.0]).T)
         self.comTask.setReference(self.sampleCom)
+        """
 
-        # FOOT MOTION TRAJECTORY
+        # Task definition (creating the task object)
+        self.comTaskSe3 = tsid.TaskSE3Equality("task-com-se3", self.robot, 'base_link')
+        maskKp = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
+        maskKd = np.matrix([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).T
+
+        self.comTaskSe3.setKp(kp_com * maskKp)
+        self.comTaskSe3.setKd(2.0 * np.sqrt(kp_com) * maskKd)
+        self.comTaskSe3.useLocalFrame(False)
+        self.invdyn.addMotionTask(self.comTaskSe3, w_com, 1, 0.0)
+
+        # TSID Trajectory (creating the trajectory object and linking it to the task)
+        self.com_ref = self.robot.framePosition(self.data, self.model.getFrameId('base_link'))
+        self.trajCom = tsid.TrajectorySE3Constant("traj_base_link", self.com_ref)
+        self.sampleCom = self.trajCom.computeNext()
+        self.sampleCom.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleCom.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
+        self.sampleCom.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
+        self.comTaskSe3.setReference(self.sampleCom)
+
+        ########################
+        # CONTACTS CONSTRAINTS #
+        ########################
+
+        self.contacts = 3*[None]
+        for i, name in enumerate(foot_frames):
+            self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
+            self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
+            self.contacts[i].setKd(2.0 * np.sqrt(kp_contact) * matlib.ones(3).T)
+            H_ref = self.robot.framePosition(self.data, self.model.getFrameId(name))
+            self.contacts[i].setReference(H_ref)
+            self.contacts[i].useLocalFrame(False)
+
+            ############################
+            # REFERENCE CONTACT FORCES #
+            ############################
+
+            """if i == 3:
+                self.contacts[i].setForceReference(np.matrix([0.0, 0.0, 29.21 * 0.35]).T) # 2.2 * 9.81 * 0.25
+                self.contacts[i].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)"""
+
+            self.invdyn.addRigidContact(self.contacts[i], w_forceRef, 1.0, 1)
+
+        ####################
+        # FOOT MOTION TASK #
+        ####################
+
+        
+        # Task definition (creating the task object)
+        self.FRfootTask = tsid.TaskSE3Equality("FR-foot-placement", self.robot, 'FR_FOOT')
+        
+        # ignore rotation for contact points
+        mask = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).T
+        self.FRfootTask.setKp(kp_foot * mask)  # matlib.ones(6).T)
+        self.FRfootTask.setKd(2.0 * np.sqrt(kp_foot) * mask)  # matlib.ones(6).T)
+        # set a mask allowing only the transation upon x and z-axis
+        # self.FRfootTask.setMask(np.matrix([[1, 0, 1, 0, 0, 0]]).T)
+        self.FRfootTask.useLocalFrame(False)
+        # Add the task to the HQP with weight = w_foot, priority level = 0 (as real constraint) and a transition duration = 0.0
+        self.invdyn.addMotionTask(self.FRfootTask, w_foot, 1, 0.0)
+
+        # TSID Trajectory (creating the trajectory object and linking it to the task)
         # pin.forwardKinematics(self.model, self.data, self.qdes)
-        # pin.updateFramePlacements(self.model, self.data)
+        # pin.updateFramePlacements(self.model, self.data)
 
         # Get the current position/orientation of the foot frame
         self.FR_foot_ref = self.robot.framePosition(self.data, self.model.getFrameId('FR_FOOT'))
         # Set the goal 5 cm above the starting location of the foot
-        FRgoalz = self.FR_foot_ref.translation[2, 0]
+        FRgoalz = -0.223 #-0.223 # self.FR_foot_ref.translation[2, 0]
         self.FR_foot_goal = self.FR_foot_ref.copy()
         self.FR_foot_goal.translation = np.matrix(
             [self.FR_foot_ref.translation[0, 0], self.FR_foot_ref.translation[1, 0], FRgoalz]).T
@@ -171,6 +197,10 @@ class controller:
         self.trajFRfoot = tsid.TrajectorySE3Constant("traj_FR_foot", self.FR_foot_goal)
         self.sampleFoot = self.trajFRfoot.computeNext()
         self.FRfootTask.setReference(self.sampleFoot)
+
+        ##########
+        # SOLVER #
+        ##########
 
         # Initialization of the solver
 
@@ -182,20 +212,25 @@ class controller:
     ####################################################################
     #                      Torque Control method                       #
     ####################################################################
-    def control(self, qmes12, vmes12, t):
+    def control(self, qmes12, vmes12, t, solo):
 
         # Set TSID state to the state of PyBullet simulation
         self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
-        self.qdes[2:7] = qmes12[2:7]  # Keep height and orientation
+        self.qdes[2] = 0.0  # Discard height position
+        """self.qdes[2:7] = qmes12[2:7]  # Keep height and orientation
         self.vdes[:6] = vmes12[:6]
         self.vdes = vmes12
         self.qdes = qmes12
-        self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
+        self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift"""
         # Update frame placements
-        # pin.forwardKinematics(self.model, self.data, self.qdes, self.vdes)
-        # pin.updateFramePlacements(self.model, self.data)
+        pin.forwardKinematics(self.model, self.data, self.qdes, self.vdes)
+        pin.updateFramePlacements(self.model, self.data)
 
-        if True:
+        # Sinusoidal reference for the contact force task
+        #self.contacts[3].setForceReference(np.matrix([0.0, 0.0, 4.0 + 3.0 * np.sin(2*3.1415*0.2*t)]).T)
+        #self.contacts[2].setForceReference(np.matrix([0.0, 0.0, 4.0 - 3.0 * np.sin(2*3.1415*0.2*t)]).T)
+
+        if False:
             """self.FR_foot_goal.translation = np.matrix(
                 [self.FR_foot_goal.translation[0, 0],
                  self.FR_foot_goal.translation[1, 0],
@@ -256,14 +291,23 @@ class controller:
         self.vdes += self.ades * dt
         self.qdes = pin.integrate(self.model, self.qdes, self.vdes * dt)
 
+        # Get contact forces for debug purpose
+        ctc_forces = self.invdyn.getContactForces(self.sol)
+        nb_feet = int(ctc_forces.shape[0] / 3)
+        for i_foot in range(nb_feet):
+            print("Contact forces foot ", i_foot, ": ", ctc_forces[(i_foot*3):(i_foot*3+3), 0].transpose())
+
+        # Refresh gepetto gui with TSID desired joint position
+        solo.display(self.qdes)
+
         # print("BASE: ", self.qdes[0:3].T)
         """print("Position: ", self.FRfootTask.position[0:3].T)
         print("Target:   ", self.FRfootTask.position_ref[0:3].T)
         print("Error:    ", self.FRfootTask.position_error[0:3].T)"""
 
         # Torque PD controller
-        P = 0  # 50
-        D = 0  # 0.2
+        P = 50  # 50
+        D = 0.2  # 0.2
         torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
         # Saturation to limit the maximal torque

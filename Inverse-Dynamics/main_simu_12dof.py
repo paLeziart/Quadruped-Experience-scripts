@@ -12,13 +12,14 @@ from TSID_MPC_controller import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
+import robots_loader
 
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 20000  # number of time steps simulated
+N_SIMULATION = 30000  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -26,6 +27,15 @@ t = 0.0  				# time
 time_error = False
 
 t_list = []
+
+########################################################################
+#                            Gepetto viewer                            #
+########################################################################
+
+solo = robots_loader.loadSolo(False)
+solo.initDisplay(loadModel=True)
+solo.viewer.gui.addFloor('world/floor')
+solo.display(solo.q0)
 
 ########################################################################
 #                              PyBullet                                #
@@ -42,7 +52,7 @@ planeId = p.loadURDF("plane.urdf")
 p.setGravity(0, 0, -9.81)
 
 # Load Quadruped robot
-robotStartPos = [0, 0, 0.34]
+robotStartPos = [0, 0, 0.235]
 robotStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
 p.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
 robotId = p.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
@@ -54,7 +64,8 @@ p.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlM
                             forces=[0.0 for m in revoluteJointIndices])
 
 # Initialize the robot in a specific configuration
-p.resetJointStatesMultiDof(robotId, revoluteJointIndices, q0[7:])
+straight_standing = np.array([[0, 0.8, -1.6, 0, 0.8, -1.6, 0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()
+p.resetJointStatesMultiDof(robotId, revoluteJointIndices, straight_standing)  # q0[7:])
 
 # Enable torque control for revolute joints
 jointTorques = [0.0 for m in revoluteJointIndices]
@@ -86,6 +97,7 @@ for i in range(N_SIMULATION):
 
     jointStates = p.getJointStates(robotId, revoluteJointIndices)  # State of all joints
     baseState = p.getBasePositionAndOrientation(robotId)
+    baseVel = p.getBaseVelocity(robotId)
 
     # Joints configuration and velocity vector
     """qmes8 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T, np.array(
@@ -102,7 +114,7 @@ for i in range(N_SIMULATION):
     # Joints configuration and velocity vector for free-flyer + 12 dof
     qmes12 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T,
                         np.array([[jointStates[i_joint][0] for i_joint in range(len(jointStates))]]).T))
-    vmes12 = np.vstack((np.zeros((6, 1)),
+    vmes12 = np.vstack((np.array([baseVel[0]]).T, np.array([baseVel[1]]).T,
                         np.array([[jointStates[i_joint][1] for i_joint in range(len(jointStates))]]).T))
 
     ####################################################################
@@ -123,7 +135,7 @@ for i in range(N_SIMULATION):
         myController = myEmergencyStop
 
     # Retrieve the joint torques from the appropriate controller
-    jointTorques = myController.control(qmes12, vmes12, t).reshape((12, 1))
+    jointTorques = myController.control(qmes12, vmes12, t, solo).reshape((12, 1))
 
     # Set control torque for all joints
     p.setJointMotorControlArray(robotId, revoluteJointIndices,
@@ -146,7 +158,7 @@ for i in range(N_SIMULATION):
 
 # Plot the tracking of the trajectories
 
-plt.figure(1)
+"""plt.figure(1)
 plt.plot(t_list, 'k+')
 
-plt.show()
+plt.show()"""
