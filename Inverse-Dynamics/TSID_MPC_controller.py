@@ -29,7 +29,7 @@ class controller:
         self.ades = np.zeros((18, 1))
         self.error = False
 
-        kp_posture = 10.0		# proportionnal gain of the posture task
+        kp_posture = 100.0		# proportionnal gain of the posture task
         w_posture = 1.0			# weight of the posture task
 
         kp_lock = 0.0			# proportionnal gain of the lock task
@@ -41,16 +41,22 @@ class controller:
         fMax = 100.0  			# maximum normal force
 
         w_forceRef = 1e-3		# weight of the forces regularization
-        kp_contact = 1000.0		# proportionnal gain for the contacts
+        self.w_forceRef = w_forceRef
+        kp_contact = 1.0		# proportionnal gain for the contacts
 
-        foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']  # tab with all the foot frames names
+        self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']  # tab with all the foot frames names
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
-        kp_com = 10.0
-        w_com = 1.0
+        kp_com = 0.0
+        w_com = 0.0
 
-        kp_foot = 2000.0
-        w_foot = 30.0
+        kp_foot = 100.0
+        w_foot = 1000.0
+
+        self.pair = 0
+        self.init = False
+        self.dz = 0.0003
+        self.velz = 0.3
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -122,7 +128,7 @@ class controller:
         """
 
         # Task definition (creating the task object)
-        self.comTaskSe3 = tsid.TaskSE3Equality("task-com-se3", self.robot, 'base_link')
+        """self.comTaskSe3 = tsid.TaskSE3Equality("task-com-se3", self.robot, 'base_link')
         maskKp = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
         maskKd = np.matrix([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).T
 
@@ -138,7 +144,7 @@ class controller:
         self.sampleCom.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
         self.sampleCom.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleCom.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
-        self.comTaskSe3.setReference(self.sampleCom)
+        self.comTaskSe3.setReference(self.sampleCom)"""
 
         ########################
         # CONTACTS CONSTRAINTS #
@@ -148,7 +154,7 @@ class controller:
         self.feetTask = 4*[None]
         self.feetGoal = 4*[None]
         self.feetTraj = 4*[None]
-        for i, name in enumerate(foot_frames):
+        for i, name in enumerate(self.foot_frames):
             self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
             self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
             self.contacts[i].setKd(2.0 * np.sqrt(kp_contact) * matlib.ones(3).T)
@@ -231,10 +237,26 @@ class controller:
         # Resize the solver to fit the number of variables, equality and inequality constraints
         self.solver.resize(self.invdyn.nVar, self.invdyn.nEq, self.invdyn.nIn)
 
+    def move_vertical(self, i_foot, dz, end):
+        self.feetGoal[i_foot].translation = np.matrix(
+            [self.feetGoal[i_foot].translation[0, 0],
+             self.feetGoal[i_foot].translation[1, 0],
+             self.feetGoal[i_foot].translation[2, 0] + dz]).T
+        self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
+        self.sampleFoot = self.feetTraj[i_foot].computeNext()
+        self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
+        if end:
+            self.sampleFoot.vel(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
+        self.feetTask[i_foot].setReference(self.sampleFoot)
+
+        return 0
+
     ####################################################################
     #                      Torque Control method                       #
     ####################################################################
     def control(self, qmes12, vmes12, t, solo):
+        t = np.round(t, decimals=3)
+
         print("## Time: ", t)
         # Set TSID state to the state of PyBullet simulation
         self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
@@ -253,18 +275,77 @@ class controller:
         #self.contacts[3].setForceReference(np.matrix([0.0, 0.0, 4.0 + 3.0 * np.sin(2*3.1415*0.2*t)]).T)
         #self.contacts[2].setForceReference(np.matrix([0.0, 0.0, 4.0 - 3.0 * np.sin(2*3.1415*0.2*t)]).T)
 
-        if t == 0.2:
-            self.formulation.removeRigidContact(self.contacts[1], 0.0)
+        if self.init:
+            if np.abs(t % 0.3) < 1e-4:
+                if self.pair == 0:
+                    for i_foot in [0, 3]:
+                        self.contacts[i_foot].setReference(self.feetGoal[i_foot])
+                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef, 1.0, 1)
+                    self.pair = 1
+                else:
+                    for i_foot in [1, 2]:
+                        self.contacts[i_foot].setReference(self.feetGoal[i_foot])
+                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef, 1.0, 1)
+                    self.pair = 0
+            elif np.abs((t % 0.3)-0.001) < 1e-4:
+                if self.pair == 0:
+                    for i_foot in [0, 3]:
+                        self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
+                else:
+                    for i_foot in [1, 2]:
+                        self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
 
-        if t >= 0.2:
-            self.feetGoal[1].translation = np.matrix(
-                [self.feetGoal[1].translation[0, 0],
-                 self.feetGoal[1].translation[1, 0],
-                 self.feetGoal[1].translation[2, 0] + 0.0001]).T
-            self.feetTraj[1] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[1])
-            self.sampleFoot = self.feetTraj[1].computeNext()
+            if (t % 0.3) > 0 and (t % 0.3) <= 0.15:
+                if self.pair == 0:
+                    for i_foot in [0, 3]:
+                        self.move_vertical(i_foot, 0.0003, False)
+                else:
+                    for i_foot in [1, 2]:
+                        self.move_vertical(i_foot, 0.0003, False)
+            elif (t % 0.3) > 0.15:
+                if self.pair == 0:
+                    for i_foot in [0, 3]:
+                        self.move_vertical(i_foot, -0.0003, np.abs((t % 0.3)-0.299) < 0.0001)
+                else:
+                    for i_foot in [1, 2]:
+                        self.move_vertical(i_foot, -0.0003, np.abs((t % 0.3)-0.299) < 0.0001)
+        else:
+            self.init = True
 
-            """# Target SE3 for the foot (position/orientation) in world frame
+        if np.abs(t % 0.1) < 0.001:
+            trigger = 1
+
+        """if np.abs(t - 0.2) < 0.0001:
+            for i_foot in [1, 2]:
+                self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
+
+        if np.abs(t - 0.5) < 0.0001:
+            for i_foot in [1, 2]:
+                #H_ref = self.robot.framePosition(self.data, self.model.getFrameId(self.foot_frames[i_foot]))
+                self.contacts[i_foot].setReference(self.feetGoal[i_foot])
+                self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef, 1.0, 1)
+
+        if np.abs(t - 0.2) < 0.0001 or (t >= 0.2 and t < 0.5):
+            if np.abs(t - 0.2) < 0.0001:
+                self.dz = 0.0003  # Rise
+                self.velz = 0.3
+            elif np.abs(t - 0.35) < 0.0001:
+                self.dz = - 0.0003  # Fall
+                self.velz = - 0.3
+
+            for i_foot in [1, 2]:
+                self.feetGoal[i_foot].translation = np.matrix(
+                    [self.feetGoal[i_foot].translation[0, 0],
+                     self.feetGoal[i_foot].translation[1, 0],
+                     self.feetGoal[i_foot].translation[2, 0] + self.dz]).T
+                self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
+                self.sampleFoot = self.feetTraj[i_foot].computeNext()
+                self.sampleFoot.vel(np.array([[0.0, 0.0, self.velz, 0.0, 0.0, 0.0]]).transpose())
+                if np.abs(t - 0.499) < 0.0001:
+                    self.sampleFoot.vel(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
+                self.feetTask[i_foot].setReference(self.sampleFoot)"""
+
+        """# Target SE3 for the foot (position/orientation) in world frame
             goal_x = (0.19 + 0.05 * np.sin(2*3.1415*1*t)) * np.min((1.0, t)) + \
                 self.FRfootTask.position[0, 0] * (1.0 - np.min((1.0, t)))
             goal_y = -0.15 * np.min((1.0, t)) + self.FRfootTask.position[1, 0] * (1.0 - np.min((1.0, t)))
@@ -277,10 +358,10 @@ class controller:
             self.sampleFoot.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
             self.sampleFoot.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)"""
 
-            self.feetTask[1].setReference(self.sampleFoot)
+        # self.feetTask[1].setReference(self.sampleFoot)
 
-            # pos_foot = self.robot.framePosition(self.data, self.model.getFrameId('FR_FOOT'))
-            # print("FOOT: ", pos_foot.translation.T)
+        # pos_foot = self.robot.framePosition(self.data, self.model.getFrameId('FR_FOOT'))
+        # print("FOOT: ", pos_foot.translation.T)
 
         if False:
             pos_base = self.robot.framePosition(self.data, self.model.getFrameId('base_link'))
@@ -323,9 +404,10 @@ class controller:
         nb_feet = int(ctc_forces.shape[0] / 3)
         for i_foot in range(nb_feet):
             print("Contact forces foot ", i_foot, ": ", ctc_forces[(i_foot*3):(i_foot*3+3), 0].transpose())
-        for i, name in enumerate(['HL_FOOT', 'HR_FOOT', 'FL_FOOT', 'FR_FOOT']):
+        for i, name in enumerate(['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']):
             pos_foot = self.robot.framePosition(self.data, self.model.getFrameId(name))
             print("Foot ", i, "at position ", pos_foot.translation.transpose())
+            print(i, " desired at position ", self.feetGoal[i].translation.transpose())
 
         # Refresh gepetto gui with TSID desired joint position
         solo.display(self.qdes)
@@ -337,7 +419,7 @@ class controller:
 
         # Torque PD controller
         P = 50  # 50
-        D = 0.2  # 0.2
+        D = 0.2
         torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
         # Saturation to limit the maximal torque
