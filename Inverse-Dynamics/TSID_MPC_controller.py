@@ -29,8 +29,8 @@ class controller:
         self.ades = np.zeros((18, 1))
         self.error = False
 
-        kp_posture = 100.0		# proportionnal gain of the posture task
-        w_posture = 1.0			# weight of the posture task
+        kp_posture = 10.0		# proportionnal gain of the posture task
+        w_posture = 0.0			# weight of the posture task
 
         kp_lock = 0.0			# proportionnal gain of the lock task
         w_lock = 0.0			# weight of the lock task
@@ -42,7 +42,7 @@ class controller:
 
         w_forceRef = 1e-3		# weight of the forces regularization
         self.w_forceRef = w_forceRef
-        kp_contact = 1.0		# proportionnal gain for the contacts
+        kp_contact = 0.0		# proportionnal gain for the contacts
 
         self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']  # tab with all the foot frames names
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
@@ -170,7 +170,7 @@ class controller:
                 self.contacts[i].setForceReference(np.matrix([0.0, 0.0, 29.21 * 0.35]).T)  # 2.2 * 9.81 * 0.25
                 self.contacts[i].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)"""
 
-            self.invdyn.addRigidContact(self.contacts[i], w_forceRef, 1.0, 1)
+            self.invdyn.addRigidContact(self.contacts[i], w_forceRef)
 
             ##########################
             # CONTACT TRACKING TASKS #
@@ -237,6 +237,10 @@ class controller:
         # Resize the solver to fit the number of variables, equality and inequality constraints
         self.solver.resize(self.invdyn.nVar, self.invdyn.nEq, self.invdyn.nIn)
 
+    ####################################################################
+    #                Modification foot tracking method                 #
+    ####################################################################
+
     def move_vertical(self, i_foot, dz, end):
         self.feetGoal[i_foot].translation = np.matrix(
             [self.feetGoal[i_foot].translation[0, 0],
@@ -261,6 +265,7 @@ class controller:
         # Set TSID state to the state of PyBullet simulation
         self.qdes[:2] = np.zeros((2, 1))  # Discard x and y drift
         self.qdes[2] = 0.0  # Discard height position
+        #self.vdes[0:3] = np.zeros((3, 1))
         """self.qdes[2:7] = qmes12[2:7]  # Keep height and orientation
         self.vdes[:6] = vmes12[:6]
         self.vdes = vmes12
@@ -280,12 +285,12 @@ class controller:
                 if self.pair == 0:
                     for i_foot in [0, 3]:
                         self.contacts[i_foot].setReference(self.feetGoal[i_foot])
-                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef, 1.0, 1)
+                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                     self.pair = 1
                 else:
                     for i_foot in [1, 2]:
                         self.contacts[i_foot].setReference(self.feetGoal[i_foot])
-                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef, 1.0, 1)
+                        self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                     self.pair = 0
             elif np.abs((t % 0.3)-0.001) < 1e-4:
                 if self.pair == 0:
@@ -305,10 +310,10 @@ class controller:
             elif (t % 0.3) > 0.15:
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.move_vertical(i_foot, -0.0003, np.abs((t % 0.3)-0.299) < 0.0001)
+                        self.move_vertical(i_foot, -0.0003, (t == 0.299))
                 else:
                     for i_foot in [1, 2]:
-                        self.move_vertical(i_foot, -0.0003, np.abs((t % 0.3)-0.299) < 0.0001)
+                        self.move_vertical(i_foot, -0.0003, (t == 0.299))
         else:
             self.init = True
 
@@ -408,6 +413,16 @@ class controller:
             pos_foot = self.robot.framePosition(self.data, self.model.getFrameId(name))
             print("Foot ", i, "at position ", pos_foot.translation.transpose())
             print(i, " desired at position ", self.feetGoal[i].translation.transpose())
+
+        # Display non-locked target footholds with green spheres (gepetto gui)
+        rgbt = [0.0, 1.0, 0.0, 0.5]
+        for i in range(4):
+            if (t == 0):
+                solo.viewer.gui.addSphere("world/sphere"+str(i)+"_nolock", .02, rgbt)  # .1 is the radius
+            solo.viewer.gui.applyConfiguration(
+                "world/sphere"+str(i)+"_nolock", (self.feetGoal[i].translation[0, 0],
+                                                  self.feetGoal[i].translation[1, 0],
+                                                  self.feetGoal[i].translation[2, 0], 1., 0., 0., 0.))
 
         # Refresh gepetto gui with TSID desired joint position
         solo.display(self.qdes)
