@@ -324,7 +324,7 @@ class controller:
 
         # Saturation to limit the maximal torque
         t_max = 2.5
-        tau = np.maximum(np.minimum(torques12, t_max * np.ones((12, 1))), -t_max * np.ones((12, 1)))
+        tau = np.clip(torques12, -t_max, t_max)  # faster than np.maximum(a_min, np.minimum(a, a_max))
 
         # self.error = self.error or (self.sol.status != 0) or (qmes12[8] < -np.pi/2) or (
         #              qmes12[11] < -np.pi/2) or (qmes12[14] < -np.pi/2) or (qmes12[17] < -np.pi/2) or (
