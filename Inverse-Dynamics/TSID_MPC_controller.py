@@ -11,7 +11,7 @@ import pinocchio as pin
 import numpy as np
 import numpy.matlib as matlib
 import tsid
-
+from IPython import embed
 pin.switchToNumpyMatrix()
 
 
@@ -24,13 +24,13 @@ class controller:
     def __init__(self, q0, omega, t):
 
         self.omega = omega
-        self.qdes = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        self.qdes = np.array([[0.0, 0.0, 0.235, 0.0, 0.0, 0.0, 1.0,
                                0.0, 0.8, -1.6, 0, 0.8, -1.6,
                                0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()  # q0.copy()
         self.vdes = np.zeros((18, 1))
         self.ades = np.zeros((18, 1))
         self.error = False
-        self.verbose = False
+        self.verbose = True
 
         # List with the names of all feet frames
         self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
@@ -42,11 +42,11 @@ class controller:
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         # Coefficients of the posture task
-        kp_posture = 10.0		# proportionnal gain of the posture task
+        kp_posture = 5000.0		# proportionnal gain of the posture task
         w_posture = 1.0			# weight of the posture task
 
         # Coefficients of the contact tasks
-        kp_contact = 20000.0		# proportionnal gain for the contacts
+        kp_contact = 200000.0		# proportionnal gain for the contacts
         self.w_forceRef = 1e-5		# weight of the forces regularization
 
         # Coefficients of the foot tracking tasks
@@ -57,6 +57,8 @@ class controller:
         self.init = False  # Flag for first iteration
         self.dz = 0.0003  # Vertical displacement for each iteration
         self.velz = 0.3  # Vertical velocity for each iteration
+
+        self.contact_height = 0.017
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -77,6 +79,7 @@ class controller:
         # Creation of the Invverse Dynamics HQP problem using the robot
         # accelerations (base + joints) and the contact forces
         self.invdyn = tsid.InverseDynamicsFormulationAccForce("tsid", self.robot, False)
+        # embed()
         # Compute the problem data with a solver based on EiQuadProg
         self.invdyn.computeProblemData(t, self.qdes, self.vdes)
 
@@ -95,7 +98,7 @@ class controller:
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         pin.loadReferenceConfigurations(self.model, srdf, False)
         self.q_ref = self.model.referenceConfigurations['straight_standing']
-        self.q_ref[2, 0] = 0  # Discard height
+        self.q_ref[2, 0] = 0.235  # 0.223
         self.trajPosture = tsid.TrajectoryEuclidianConstant("traj_joint", self.q_ref[7:])
         # Set the trajectory as reference of the posture task
         self.samplePosture = self.trajPosture.computeNext()
@@ -113,6 +116,9 @@ class controller:
         self.feetGoal = 4*[None]  # List to store the tracking goals
         self.feetTraj = 4*[None]  # List to store the trajectory objects
 
+        self.initPosContacts = 4*[None]
+        self.offset_z = 4*[0.0]
+
         for i, name in enumerate(self.foot_frames):
 
             ##########################
@@ -120,11 +126,16 @@ class controller:
             ##########################
 
             self.contacts[i] = tsid.ContactPoint(name, self.robot, name, contactNormal, mu, fMin, fMax)
-            self.contacts[i].setKp(kp_contact * matlib.ones(3).T)
-            self.contacts[i].setKd(2.0 * np.sqrt(kp_contact) * matlib.ones(3).T)
+            self.contacts[i].setKp((kp_contact * matlib.ones(3).T))
+            self.contacts[i].setKd((2.0 * np.sqrt(kp_contact) * matlib.ones(3).T))
             self.contacts[i].useLocalFrame(False)
             H_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(name))
+            H_ref.translation = np.matrix(
+                [H_ref.translation[0, 0],
+                 H_ref.translation[1, 0],
+                 self.contact_height]).T
             self.contacts[i].setReference(H_ref)
+            self.initPosContacts[i] = H_ref
 
             ############################
             # REFERENCE CONTACT FORCES #
@@ -156,7 +167,7 @@ class controller:
             # Get the starting position/orientation of the foot frame
             self.feetGoal[i] = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(name))
             self.feetGoal[i].translation = np.matrix(
-                [self.feetGoal[i].translation[0, 0], self.feetGoal[i].translation[1, 0], -0.223]).T
+                [self.feetGoal[i].translation[0, 0], self.feetGoal[i].translation[1, 0], self.contact_height]).T
             self.feetTraj[i] = tsid.TrajectorySE3Constant(name+"_track", self.feetGoal[i])
             # Set the trajectory as reference of the tracking task
             self.sampleFoot = self.feetTraj[i].computeNext()
@@ -176,13 +187,28 @@ class controller:
     #                Modification foot tracking method                 #
     ####################################################################
 
+    """def update_default_height(self):
+        default_height = 0.223
+        self.contact_height = self.qdes[2, 0] - default_height
+
+        for i_foot in range(4):
+            H = self.initPosContacts[i_foot]
+            H.translation = np.matrix(
+                [self.H.translation[0, 0],
+                 self.H.translation[1, 0],
+                 self.contact_height]).T
+            self.contacts[i_foot].setReference(H)
+        return 0"""
+
     def move_vertical(self, i_foot, dz, end):
+
+        self.offset_z[i_foot] += dz
 
         # Adding a vertical offset to the current goal
         self.feetGoal[i_foot].translation = np.matrix(
-            [self.feetGoal[i_foot].translation[0, 0],
-             self.feetGoal[i_foot].translation[1, 0],
-             self.feetGoal[i_foot].translation[2, 0] + dz]).T
+            [self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0],
+             self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0],
+             self.contact_height + self.offset_z[i_foot]]).T
         self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
         self.sampleFoot = self.feetTraj[i_foot].computeNext()
         self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
@@ -208,8 +234,18 @@ class controller:
             print("## Time: ", t)
 
         # Set TSID state to the state of PyBullet simulation
-        self.qdes[:3] = np.zeros((3, 1))  # Discard x and y drift and height position
-        self.vdes[0:3] = np.zeros((3, 1))  # Discard horizontal and vertical velocities
+        """self.qdes[:3] = np.zeros((3, 1))  # Discard x and y drift and height position
+        self.qdes[2, 0] = 0.235
+        self.vdes[0:3] = np.zeros((3, 1))  # Discard horizontal and vertical velocities"""
+
+        # Encoders (position of joints)
+        self.qdes[7:] = qmes12[7:]
+
+        # Gyroscopes (angular velocity of trunk)
+        self.vdes[3:6] = vmes12[3:6]
+
+        # IMU estimation of orientation of the trunk
+        self.qdes[3:7] = qmes12[3:7]
 
         # Handling contacts and feet tracking to perform a walking trot with a period of 0.6 s
         if self.init:
@@ -318,8 +354,8 @@ class controller:
             solo.display(self.qdes)
 
         # Torque PD controller
-        P = 50  # 50
-        D = 1  #  0.2
+        P = 5  # 50
+        D = 0.05  #  0.2
         torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
         # Saturation to limit the maximal torque
