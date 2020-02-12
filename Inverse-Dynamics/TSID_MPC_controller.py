@@ -30,7 +30,7 @@ class controller:
         self.vdes = np.zeros((18, 1))
         self.ades = np.zeros((18, 1))
         self.error = False
-        self.verbose = True
+        self.verbose = False
 
         # List with the names of all feet frames
         self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
@@ -50,7 +50,7 @@ class controller:
         self.w_forceRef = 1e-5		# weight of the forces regularization
 
         # Coefficients of the foot tracking tasks
-        kp_foot = 20000.0
+        kp_foot = 10000.0
         self.w_foot = 1000.0
 
         self.pair = 0  # Which pair of feet is touching the ground
@@ -173,6 +173,49 @@ class controller:
             self.sampleFoot = self.feetTraj[i].computeNext()
             self.feetTask[i].setReference(self.sampleFoot)
 
+        ######################
+        # TRUNK POSTURE TASK #
+        ######################
+
+        """# Task definition (creating the task object)
+            self.comTask = tsid.TaskComEquality("task-com", self.robot)
+            mask = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T
+            self.comTask.setKp(kp_com * mask)
+            self.comTask.setKd(2.0 * np.sqrt(kp_com) * mask)
+            self.invdyn.addMotionTask(self.comTask, w_com, 1, 0.0)
+
+            # TSID Trajectory (creating the trajectory object and linking it to the task)
+            self.com_ref = self.robot.com(self.data)
+            self.trajCom = tsid.TrajectoryEuclidianConstant("traj_com", self.com_ref)
+            self.sampleCom = self.trajCom.computeNext()
+            self.sampleCom.pos(np.matrix([0.0, 0.0, 0.0]).T)
+            self.sampleCom.vel(np.matrix([0.0, 0.0, 0.0]).T)
+            self.sampleCom.acc(np.matrix([0.0, 0.0, 0.0]).T)
+            self.comTask.setReference(self.sampleCom)
+        """
+
+        # Task definition (creating the task object)
+        kp_com = 20000
+        w_com = 1000
+
+        self.comTaskSe3 = tsid.TaskSE3Equality("task-com-se3", self.robot, 'base_link')
+        maskKp = np.matrix([0.0, 0.0, 1.0, 0.5, 0.5, 0.0]).T
+        maskKd = np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T
+
+        self.comTaskSe3.setKp(kp_com * maskKp)
+        self.comTaskSe3.setKd(2.0 * np.sqrt(kp_com) * maskKd)
+        self.comTaskSe3.useLocalFrame(False)
+        self.invdyn.addMotionTask(self.comTaskSe3, w_com, 1, 0.0)
+
+        # TSID Trajectory (creating the trajectory object and linking it to the task)
+        self.com_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
+        self.trajCom = tsid.TrajectorySE3Constant("traj_base_link", self.com_ref)
+        self.sampleCom = self.trajCom.computeNext()
+        self.sampleCom.pos(np.matrix([0.0, 0.0, 0.235, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleCom.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
+        self.sampleCom.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
+        self.comTaskSe3.setReference(self.sampleCom)
+
         ##########
         # SOLVER #
         ##########
@@ -212,14 +255,19 @@ class controller:
 
         pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
 
+        transi = 0.15
+        alpha = np.min((transi, t % 0.3)) / transi
+        beta = 0.2
+        k_xy = np.max((0.0, (alpha - beta) / (1 - beta)))
+
         # Adding a vertical offset to the current goal
         self.feetGoal[i_foot].translation = np.matrix(
-            [(self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0]) * np.min((0.2, t % 0.3)) / 0.2
-             + pos_foot.translation[0, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2),
-             (self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0]) * np.min((0.2, t % 0.3)) / 0.2
-             + pos_foot.translation[1, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2),
-             (self.contact_height + self.offset_z[i_foot]) * np.min((0.2, t % 0.3)) / 0.2
-             + pos_foot.translation[2, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2)]).T
+            [(self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0]) * k_xy
+             + pos_foot.translation[0, 0] * (1.0 - k_xy),
+             (self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0]) * k_xy
+             + pos_foot.translation[1, 0] * (1.0 - k_xy),
+             (self.contact_height + self.offset_z[i_foot]) * alpha
+             + pos_foot.translation[2, 0] * (1.0 - alpha)]).T
         self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
         self.sampleFoot = self.feetTraj[i_foot].computeNext()
         # self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
@@ -337,10 +385,15 @@ class controller:
             nb_feet = int(ctc_forces.shape[0] / 3)
             for i_foot in range(nb_feet):
                 print("Contact forces foot ", i_foot, ": ", ctc_forces[(i_foot*3):(i_foot*3+3), 0].transpose())
+                if np.any(np.isnan(ctc_forces)):
+                    debug = 1
             for i, name in enumerate(['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']):
                 pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(name))
                 print("Foot ", i, "at position ", pos_foot.translation.transpose())
                 print(i, " desired at position ", self.feetGoal[i].translation.transpose())
+
+            tmp = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
+            print("Trunk is at position ", tmp.translation.transpose())
 
             # Display target 3D positions of footholds with green spheres (gepetto gui)
             rgbt = [0.0, 1.0, 0.0, 0.5]
@@ -368,14 +421,19 @@ class controller:
             # Refresh gepetto gui with TSID desired joint position
             solo.display(self.qdes)
 
-        # Torque PD controller
-        P = 5  # 50
-        D = 0.05  #  0.2
-        torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
+        # Check for NaN value
+        if np.any(np.isnan(tau_ff)):
+            self.error = True
+            tau = np.zeros((12, 1))
+        else:
+            # Torque PD controller
+            P = 5  # 50
+            D = 0.05  #  0.2
+            torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
-        # Saturation to limit the maximal torque
-        t_max = 2.5
-        tau = np.clip(torques12, -t_max, t_max)  # faster than np.maximum(a_min, np.minimum(a, a_max))
+            # Saturation to limit the maximal torque
+            t_max = 2.5
+            tau = np.clip(torques12, -t_max, t_max)  # faster than np.maximum(a_min, np.minimum(a, a_max))
 
         # self.error = self.error or (self.sol.status != 0) or (qmes12[8] < -np.pi/2) or (
         #              qmes12[11] < -np.pi/2) or (qmes12[14] < -np.pi/2) or (qmes12[17] < -np.pi/2) or (

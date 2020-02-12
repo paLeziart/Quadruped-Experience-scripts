@@ -46,7 +46,7 @@ class controller_12dof:
     ####################################################################
     #                      Torque Control method                       #
     ####################################################################
-    def control(self, qmes12, vmes12, t):
+    def control(self, qmes12, vmes12, t, solo):
 
         # D Torque controller,
         D = 0.2
