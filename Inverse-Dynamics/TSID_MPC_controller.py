@@ -195,15 +195,14 @@ class controller:
         """
 
         # Task definition (creating the task object)
-        kp_com = 20000
+        kp_com = np.matrix([20000, 20000, 20000, 10000, 10000, 10000]).T
         w_com = 1000
 
         self.comTaskSe3 = tsid.TaskSE3Equality("task-com-se3", self.robot, 'base_link')
-        maskKp = np.matrix([0.0, 0.0, 1.0, 0.5, 0.5, 0.0]).T
-        maskKd = np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T
+        mask = np.matrix([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).T
 
-        self.comTaskSe3.setKp(kp_com * maskKp)
-        self.comTaskSe3.setKd(2.0 * np.sqrt(kp_com) * maskKd)
+        self.comTaskSe3.setKp(np.multiply(kp_com, mask))
+        self.comTaskSe3.setKd(2.0 * np.sqrt(np.multiply(kp_com, mask)))
         self.comTaskSe3.useLocalFrame(False)
         self.invdyn.addMotionTask(self.comTaskSe3, w_com, 1, 0.0)
 
@@ -309,6 +308,9 @@ class controller:
 
         # IMU estimation of orientation of the trunk
         self.qdes[3:7] = qmes12[3:7]
+
+        self.qdes = qmes12
+        self.vmes = vmes12
 
         # Handling contacts and feet tracking to perform a walking trot with a period of 0.6 s
         if self.init:
