@@ -41,7 +41,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.DIRECT)
+physicsClient = p.connect(p.GUI)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
@@ -143,7 +143,7 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    # myForceMonitor.display_contact_forces()
+    myForceMonitor.display_contact_forces()
 
 
 # Plot the time spent to run each iteration of the loop

@@ -200,22 +200,37 @@ class controller:
             self.contacts[i_foot].setReference(H)
         return 0"""
 
-    def move_vertical(self, i_foot, dz, end):
+    def move_vertical(self, i_foot, dz, t, end):
 
-        self.offset_z[i_foot] += dz
+        # self.offset_z[i_foot] += dz
+
+        h = 0.05
+        f = 1/0.3
+        self.offset_z[i_foot] = h * 0.5 * (1 - np.cos(2*np.pi*f*t))
+        vel_z = + h * np.pi * f * np.sin(2*np.pi*f*t)
+        acc_z = + h * 2 * np.pi * np.pi * f * f * np.cos(2*np.pi*f*t)
+
+        pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
 
         # Adding a vertical offset to the current goal
         self.feetGoal[i_foot].translation = np.matrix(
-            [self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0],
-             self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0],
-             self.contact_height + self.offset_z[i_foot]]).T
+            [(self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0]) * np.min((0.2, t % 0.3)) / 0.2
+             + pos_foot.translation[0, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2),
+             (self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0]) * np.min((0.2, t % 0.3)) / 0.2
+             + pos_foot.translation[1, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2),
+             (self.contact_height + self.offset_z[i_foot]) * np.min((0.2, t % 0.3)) / 0.2
+             + pos_foot.translation[2, 0] * (1.0 - np.min((0.2, t % 0.3)) / 0.2)]).T
         self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
         self.sampleFoot = self.feetTraj[i_foot].computeNext()
-        self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
+        # self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
+
+        self.sampleFoot.vel(np.array([[0.0, 0.0, vel_z, 0.0, 0.0, 0.0]]).transpose())
+        self.sampleFoot.acc(np.array([[0.0, 0.0, acc_z, 0.0, 0.0, 0.0]]).transpose())
 
         # If the foot is going to enter stance phase then the desired velocity is 0
         if end:
             self.sampleFoot.vel(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
+            self.sampleFoot.acc(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
 
         # Setting the new reference
         self.feetTask[i_foot].setReference(self.sampleFoot)
@@ -275,17 +290,17 @@ class controller:
             if (t % 0.3) > 0 and (t % 0.3) <= 0.15:  # Feet in swing phase moving upwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.move_vertical(i_foot, 0.0003, False)
+                        self.move_vertical(i_foot, 0.0003, t, False)
                 else:
                     for i_foot in [1, 2]:
-                        self.move_vertical(i_foot, 0.0003, False)
+                        self.move_vertical(i_foot, 0.0003, t, False)
             elif (t % 0.3) > 0.15:  # Feet in swing phase moving downwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.move_vertical(i_foot, -0.0003, (t == 0.299))
+                        self.move_vertical(i_foot, -0.0003, t, (t == 0.299))
                 else:
                     for i_foot in [1, 2]:
-                        self.move_vertical(i_foot, -0.0003, (t == 0.299))
+                        self.move_vertical(i_foot, -0.0003, t, (t == 0.299))
         else:
             self.init = True
 
