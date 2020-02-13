@@ -50,7 +50,7 @@ class controller:
         self.w_forceRef = 1e-5		# weight of the forces regularization
 
         # Coefficients of the foot tracking tasks
-        kp_foot = 10000.0
+        kp_foot = 20000.0
         self.w_foot = 1000.0
 
         self.pair = 0  # Which pair of feet is touching the ground
@@ -59,6 +59,12 @@ class controller:
         self.velz = 0.3  # Vertical velocity for each iteration
 
         self.contact_height = 0.017
+
+        k_max_loop = 2400
+        self.p_feet = np.zeros((4, k_max_loop, 3))
+        self.p_contacts = np.zeros((4, k_max_loop, 3))
+        self.p_tracking = np.zeros((4, k_max_loop, 3))
+        self.p_set_contact = np.zeros((4, 3))
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -136,6 +142,8 @@ class controller:
                  self.contact_height]).T
             self.contacts[i].setReference(H_ref)
             self.initPosContacts[i] = H_ref
+
+            self.p_set_contact[i:(i+1), 0:3] = H_ref.translation.transpose()
 
             ############################
             # REFERENCE CONTACT FORCES #
@@ -242,7 +250,7 @@ class controller:
             self.contacts[i_foot].setReference(H)
         return 0"""
 
-    def move_vertical(self, i_foot, dz, t, end):
+    def move_vertical(self, i_foot, dz, t, v, end):
 
         # self.offset_z[i_foot] += dz
 
@@ -254,19 +262,32 @@ class controller:
 
         pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
 
-        transi = 0.15
-        alpha = np.min((transi, t % 0.3)) / transi
-        beta = 0.2
+        transi = 0.2
+        # alpha = np.min((transi, t % 0.3)) / transi
+
+        alpha = np.min((1.0, (t % 0.3) / transi))
+        beta = 0.5
         k_xy = np.max((0.0, (alpha - beta) / (1 - beta)))
+
+        pos_base = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("base_link"))
+
+        shift_y = np.array([0.025, -0.025, 0.025, -0.025])
+        shift_x = np.array([0.025, 0.025, -0.025, -0.025])
+        rotatedShoulders = np.dot(
+            pos_base.rotation, self.initPosContacts[i_foot].translation + np.matrix([shift_x[i_foot], shift_y[i_foot], 0.0]).T)
+
+        k_fb = 0.0
+        """alpha = 0.0
+        k_xy = 0.0"""
 
         # Adding a vertical offset to the current goal
         self.feetGoal[i_foot].translation = np.matrix(
-            [(self.initPosContacts[i_foot].translation[0, 0] + self.qdes[0, 0]) * k_xy
-             + pos_foot.translation[0, 0] * (1.0 - k_xy),
-             (self.initPosContacts[i_foot].translation[1, 0] + self.qdes[1, 0]) * k_xy
-             + pos_foot.translation[1, 0] * (1.0 - k_xy),
+            [(rotatedShoulders[0, 0] + k_fb * v[0, 0] + self.qdes[0, 0]) * k_xy
+             + self.p_set_contact[i_foot, 0] * (1.0 - k_xy),
+             (rotatedShoulders[1, 0] + k_fb * v[1, 0] + self.qdes[1, 0]) * k_xy
+             + self.p_set_contact[i_foot, 1] * (1.0 - k_xy),
              (self.contact_height + self.offset_z[i_foot]) * alpha
-             + pos_foot.translation[2, 0] * (1.0 - alpha)]).T
+             + self.p_set_contact[i_foot, 2] * (1.0 - alpha)]).T
         self.feetTraj[i_foot] = tsid.TrajectorySE3Constant("traj_FR_foot", self.feetGoal[i_foot])
         self.sampleFoot = self.feetTraj[i_foot].computeNext()
         # self.sampleFoot.vel(np.array([[0.0, 0.0, dz * 1000, 0.0, 0.0, 0.0]]).transpose())
@@ -313,21 +334,29 @@ class controller:
         self.vmes = vmes12
 
         # Handling contacts and feet tracking to perform a walking trot with a period of 0.6 s
+        e = 2e-4
         if self.init:
-            if np.abs(t % 0.3) < 1e-4:  # If time is a multiple of 0.3 then we enter a four contacts phase
+            if (np.abs(t % 0.3) < e) or (np.abs(t % 0.3) > (0.3-e)):  # If time is a multiple of 0.3 then we enter a four contacts phase
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.contacts[i_foot].setReference(self.feetGoal[i_foot])
+                        pos_foot = self.robot.framePosition(
+                            self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+                        self.contacts[i_foot].setReference(pos_foot)  # self.feetGoal[i_foot])
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                         self.invdyn.removeTask(self.foot_frames[i_foot]+"_track", 0.0)
+                        self.p_set_contact[i_foot:(i_foot+1), :] = self.feetGoal[i_foot].translation.transpose()
                     self.pair = 1
                 else:
                     for i_foot in [1, 2]:
-                        self.contacts[i_foot].setReference(self.feetGoal[i_foot])
+                        pos_foot = self.robot.framePosition(
+                            self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+                        self.contacts[i_foot].setReference(pos_foot)  # self.feetGoal[i_foot])
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                         self.invdyn.removeTask(self.foot_frames[i_foot]+"_track", 0.0)
+                        self.p_set_contact[i_foot:(i_foot+1), :] = self.feetGoal[i_foot].translation.transpose()
                     self.pair = 0
-            elif np.abs((t % 0.3)-0.001) < 1e-4:  # Feet leaving the ground after a four contacts phase
+            # Feet leaving the ground after a four contacts phase
+            elif (np.abs((t % 0.3)-0.001) < e) or (np.abs((t % 0.3)-0.001) > (0.3-e-0.001)):
                 if self.pair == 0:
                     for i_foot in [0, 3]:
                         self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
@@ -340,22 +369,37 @@ class controller:
             if (t % 0.3) > 0 and (t % 0.3) <= 0.15:  # Feet in swing phase moving upwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.move_vertical(i_foot, 0.0003, t, False)
+                        self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
                 else:
                     for i_foot in [1, 2]:
-                        self.move_vertical(i_foot, 0.0003, t, False)
+                        self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
             elif (t % 0.3) > 0.15:  # Feet in swing phase moving downwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
-                        self.move_vertical(i_foot, -0.0003, t, (t == 0.299))
+                        self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
                 else:
                     for i_foot in [1, 2]:
-                        self.move_vertical(i_foot, -0.0003, t, (t == 0.299))
+                        self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
+
+            """for i_foot in range(4):
+                pos_foot = self.robot.framePosition(
+                    self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+
+                self.feetGoal[i_foot].translation = np.matrix(
+                    [pos_foot.translation[0, 0],
+                     pos_foot.translation[1, 0],
+                     self.feetGoal[i_foot].translation[2, 0]]).T
+
+                self.contacts[i_foot].setReference(self.feetGoal[i_foot])"""
+
         else:
             self.init = True
 
-        if np.abs(t % 0.1) < 0.001:
+        if np.abs(t % 4.7) < 0.0004:
             debug = 1
+        if (np.abs(t % 0.05) < 0.0005) or (np.abs(t % 0.05) > 0.0495):
+            debug = 1
+        debug = 0
 
         # Old code for smooth transition between the current position and the current target position
         """# Target SE3 for the foot (position/orientation) in world frame
@@ -370,6 +414,16 @@ class controller:
                                            1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
             self.sampleFoot.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
             self.sampleFoot.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)"""
+
+        if True:
+            k_log = np.int(np.round(t*1000))
+            for i, name in enumerate(['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']):
+                pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(name))
+                self.p_feet[i:(i+1), k_log, :] = pos_foot.translation.transpose()
+
+                self.p_contacts[i:(i+1), k_log, :] = self.p_set_contact[i, :]
+
+                self.p_tracking[i:(i+1), k_log, :] = self.feetGoal[i].translation.transpose()
 
         # Resolution of the HQP problem
         HQPData = self.invdyn.computeProblemData(t, self.qdes, self.vdes)
@@ -429,8 +483,8 @@ class controller:
             tau = np.zeros((12, 1))
         else:
             # Torque PD controller
-            P = 5  # 50
-            D = 0.05  #  0.2
+            P = 0.0  # 5  # 50
+            D = 0.0  # 0.05  #  0.2
             torques12 = P * (self.qdes[7:] - qmes12[7:]) + D * (self.vdes[6:] - vmes12[6:]) + tau_ff
 
             # Saturation to limit the maximal torque
