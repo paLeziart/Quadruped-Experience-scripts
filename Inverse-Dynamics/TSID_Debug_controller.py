@@ -53,15 +53,15 @@ class controller:
         self.w_forceRef = 1e-5		# weight of the forces regularization
 
         # Coefficients of the foot tracking task
-        kp_foot = 100.0		        # proportionnal gain for the tracking task
-        self.w_foot = 1000.0		# weight of the tracking task
+        kp_foot = 1.0		        # proportionnal gain for the tracking task
+        self.w_foot = 100000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([20000, 20000, 20000, 10000, 10000, 10000]).T
         w_trunk = 1000
 
         # Coefficients of the CoM task
-        self.kp_com = 100
+        self.kp_com = 300
         self.w_com = 1000
         offset_x_com = - 0.05  # offset along X for the reference position of the CoM
 
@@ -275,25 +275,25 @@ class controller:
         # UPDATE TASKS #
         ################
 
-        k_loop = k_simu % 600
+        k_loop = k_simu
 
-        if k_loop == 0:  # Start swing phase
+        if k_loop == 300:  # Start swing phase
 
             # Disable the contact
             self.invdyn.removeRigidContact("FR_FOOT", 0.0)
 
             # Update the foot tracking task
-            self.update_foot_task(k_loop)
+            self.update_foot_task(k_loop-300)
 
             # Enable the foot tracking task
             self.invdyn.addMotionTask(self.footTask, self.w_foot, 1, 0.0)
 
-        elif k_loop < 300:
+        elif k_loop > 300 and k_loop < 600:
 
             # Update the foot tracking task
-            self.update_foot_task(k_loop)
+            self.update_foot_task(k_loop-300)
 
-        elif k_loop == 300:
+        elif k_loop == 600:
 
             # Update the position of the contact and enable it
             pos_foot = self.robot.framePosition(
