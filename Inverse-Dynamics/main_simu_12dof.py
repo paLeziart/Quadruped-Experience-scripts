@@ -7,7 +7,7 @@ import pybullet_data
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_MPC_controller import controller, dt, q0, omega
+from TSID_Debug_controller import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
@@ -19,7 +19,7 @@ import robots_loader
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 2100  # number of time steps simulated
+N_SIMULATION = 1200  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -125,14 +125,14 @@ for i in range(N_SIMULATION):
         myController = myEmergencyStop
 
     # Retrieve the joint torques from the appropriate controller
-    jointTorques = myController.control(qmes12, vmes12, t, solo).reshape((12, 1))
+    jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
 
     # Set control torque for all joints
     p.setJointMotorControlArray(robotId, revoluteJointIndices,
                                 controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
     # Compute one step of simulation
-    p.stepSimulation()
+    # p.stepSimulation()
 
     # Time incrementation
     t += dt
@@ -144,9 +144,42 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    myForceMonitor.display_contact_forces()
+    # myForceMonitor.display_contact_forces()
+
 
 # Plot the time spent to run each iteration of the loop
+
+plt.figure(1)
+l_str = ["X", "Y", "Z"]
+for i in range(3):
+    plt.subplot(3, 3, 3*i+1)
+    plt.plot(myController.f_pos_ref[:, i])
+    plt.plot(myController.f_pos[:, i])
+    plt.legend(["Ref pos along " + l_str[i], "Pos along " + l_str[i]])
+    plt.subplot(3, 3, 3*i+2)
+    plt.plot(myController.f_vel_ref[:, i])
+    plt.plot(myController.f_vel[:, i])
+    plt.legend(["Ref vel along " + l_str[i], "Vel along " + l_str[i]])
+    plt.subplot(3, 3, 3*i+3)
+    plt.plot(myController.f_acc_ref[:, i])
+    plt.plot(myController.f_acc[:, i])
+    plt.legend(["Ref acc along " + l_str[i], "Acc along " + l_str[i]])
+
+plt.figure(2)
+l_str = ["X", "Y", "Z", "Roll", "Pitch", "Yaw"]
+for i in range(3):
+    plt.subplot(3, 1, i+1)
+    plt.plot(myController.b_pos[:, i])
+    if i < 2:
+        plt.plot(np.zeros((N_SIMULATION,)))
+    else:
+        plt.plot((0.235 - 0.01264513) * np.ones((N_SIMULATION,)))
+    plt.legend([l_str[i], "Reference"])
+plt.show()
+
+plt.show()
+
+quit()
 
 """plt.figure(1)
 plt.plot(t_list, 'k+')
@@ -160,7 +193,7 @@ for i in range(3):
         plt.plot(myController.p_feet[k, :, i], color=c[k], linewidth=2)
         plt.plot(myController.p_contacts[k, :, i], linestyle='dashed', linewidth=2)
         plt.plot(myController.p_tracking[k, :, i], linestyle='dotted', linewidth=2)
-        #plt.plot(myController.p_traj_gen[k, :, i], color="rebeccapurple", linewidth=2)
+        # plt.plot(myController.p_traj_gen[k, :, i], color="rebeccapurple", linewidth=2)
         plt.legend(["Position réelle", "Position du contact", "Position du tracking"])
 
         """cpt = 0
@@ -178,7 +211,7 @@ for i in range(3):
     plt.subplot(3, 3, 3*i+1)
     for k in range(1, 2):
         plt.plot(myController.p_traj_gen[k, :, i], color=c[k], linewidth=2)
-        #plt.legend(["FL", "FR", "HL", "HR"])
+        # plt.legend(["FL", "FR", "HL", "HR"])
     plt.subplot(3, 3, 3*i+2)
     for k in range(1, 2):
         plt.plot(myController.p_vel[k, :, i], color=c[k], linewidth=2)
