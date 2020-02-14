@@ -13,12 +13,13 @@ import EmergencyStop_controller
 import ForceMonitor
 import robots_loader
 
+
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 2400  # number of time steps simulated
+N_SIMULATION = 4200  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -143,13 +144,13 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    # myForceMonitor.display_contact_forces()
+    myForceMonitor.display_contact_forces()
 
 # Plot the time spent to run each iteration of the loop
 
-plt.figure(1)
+"""plt.figure(1)
 plt.plot(t_list, 'k+')
-plt.show()
+plt.show()"""
 
 plt.figure(2)
 c = ["r", "g", "b", "k"]
@@ -159,6 +160,7 @@ for i in range(3):
         plt.plot(myController.p_feet[k, :, i], color=c[k], linewidth=2)
         plt.plot(myController.p_contacts[k, :, i], linestyle='dashed', linewidth=2)
         plt.plot(myController.p_tracking[k, :, i], linestyle='dotted', linewidth=2)
+        #plt.plot(myController.p_traj_gen[k, :, i], color="rebeccapurple", linewidth=2)
         plt.legend(["Position réelle", "Position du contact", "Position du tracking"])
 
         """cpt = 0
@@ -168,4 +170,13 @@ for i in range(3):
             plt.plot(np.arange(cpt+300, cpt+600, 1),
                      myController.p_tracking[k, (cpt+300):(cpt+600), i], color=c[k], linestyle="dotted")
             cpt += 600"""
+plt.show()
+
+plt.figure(3)
+c = ["r", "g", "b", "k"]
+for i in range(3):
+    plt.subplot(3, 1, i+1)
+    for k in range(1, 2):
+        plt.plot(myController.p_traj_gen[k, :, i], color=c[k], linewidth=2)
+        #plt.legend(["FL", "FR", "HL", "HR"])
 plt.show()
