@@ -36,24 +36,24 @@ class controller:
         self.vtsid = np.zeros((18, 1))
         self.ades = np.zeros((18, 1))
         self.error = False
-        self.verbose = True
+        self.verbose = False
 
         # List with the names of all feet frames
         self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
         # Constraining the contacts
-        mu = 0.3  				# friction coefficient
+        mu = 1  				# friction coefficient
         fMin = 1.0				# minimum normal force
         fMax = 100.0  			# maximum normal force
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         # Coefficients of the posture task
-        kp_posture = 5000.0		# proportionnal gain of the posture task
+        kp_posture = 50000.0		# proportionnal gain of the posture task
         w_posture = 1.0			# weight of the posture task
 
         # Coefficients of the contact tasks
         kp_contact = 200000.0		# proportionnal gain for the contacts
-        self.w_forceRef = 1e-5		# weight of the forces regularization
+        self.w_forceRef = 1e-6		# weight of the forces regularization
 
         # Coefficients of the foot tracking tasks
         kp_foot = 200000.0
@@ -66,11 +66,14 @@ class controller:
 
         self.contact_height = 0  # 0.0171
 
-        k_max_loop = 4200
+        k_max_loop = 2100
         self.p_feet = np.zeros((4, k_max_loop, 3))
         self.p_contacts = np.zeros((4, k_max_loop, 3))
         self.p_tracking = np.zeros((4, k_max_loop, 3))
         self.p_set_contact = np.zeros((4, 3))
+        self.p_base = np.zeros((k_max_loop, 3))
+        self.p_vel = np.zeros((4, k_max_loop, 3))
+        self.p_acc = np.zeros((4, k_max_loop, 3))
 
         # [0.1046, -0.1046, 0.1046, -0.1046]])
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
@@ -118,6 +121,7 @@ class controller:
         self.postureTask = tsid.TaskJointPosture("task-posture", self.robot)
         self.postureTask.setKp(kp_posture * matlib.ones(self.robot.nv-6).T)  # Proportional gain
         self.postureTask.setKd(2.0 * np.sqrt(kp_posture) * matlib.ones(self.robot.nv-6).T)  # Derivative gain
+
         # Add the task to the HQP with weight = w_posture, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
         self.invdyn.addMotionTask(self.postureTask, w_posture, 1, 0.0)
@@ -345,11 +349,13 @@ class controller:
 
         # If the foot is going to enter stance phase then the desired velocity is 0
         if end:
-            self.sampleFoot.vel(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
-            self.sampleFoot.acc(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).transpose())
+            self.sampleFoot.vel(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).T)
+            self.sampleFoot.acc(np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]).T)
 
         # Setting the new reference
         self.feetTask[i_foot].setReference(self.sampleFoot)
+
+        print(i_foot, " : ", self.feetTask[i_foot].position_ref[0:3].transpose())
 
         return 0
 
@@ -413,9 +419,9 @@ class controller:
                     for i_foot in [0, 3]:
                         pos_foot = self.robot.framePosition(
                             self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-                        #pos_foot.translation = np.matrix([self.ftraj_gen.desired_pos[:, i_foot]]).T
-                        #pos_foot.translation = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0]).T
-                        #self.feetGoal[i_foot].translation = pos_foot.translation
+                        # pos_foot.translation = np.matrix([self.ftraj_gen.desired_pos[:, i_foot]]).T
+                        # pos_foot.translation = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0]).T
+                        # self.feetGoal[i_foot].translation = pos_foot.translation
                         self.contacts[i_foot].setReference(pos_foot)  # self.feetGoal[i_foot])
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                         self.invdyn.removeTask(self.foot_frames[i_foot]+"_track", 0.0)
@@ -425,13 +431,14 @@ class controller:
                     for i_foot in [1, 2]:
                         pos_foot = self.robot.framePosition(
                             self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-                        #pos_foot.translation = np.matrix([self.ftraj_gen.desired_pos[:, i_foot]]).T
-                        #pos_foot.translation = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0]).T
-                        #self.feetGoal[i_foot].translation = pos_foot.translation
+                        # pos_foot.translation = np.matrix([self.ftraj_gen.desired_pos[:, i_foot]]).T
+                        # pos_foot.translation = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0]).T
+                        # self.feetGoal[i_foot].translation = pos_foot.translation
                         self.contacts[i_foot].setReference(pos_foot)  # self.feetGoal[i_foot])
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
                         self.invdyn.removeTask(self.foot_frames[i_foot]+"_track", 0.0)
-                        self.p_set_contact[i_foot:(i_foot+1), :] = self.feetGoal[i_foot].translation.transpose()
+                        # self.feetGoal[i_foot].translation.transpose()
+                        self.p_set_contact[i_foot:(i_foot+1), :] = pos_foot.translation.transpose()
                     self.pair = 0
             # Feet leaving the ground after a four contacts phase
             elif (np.abs((t % 0.3)-0.001) < e) or (np.abs((t % 0.3)-0.001) > (0.3-e-0.001)):
@@ -439,32 +446,36 @@ class controller:
                     for i_foot in [0, 3]:
                         self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
                         self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
+                        self.ftraj_gen.desired_pos[:, i_foot:(
+                            i_foot+1)] = self.p_set_contact[i_foot:(i_foot+1), :].transpose()
                 else:
                     for i_foot in [1, 2]:
                         self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
                         self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
+                        self.ftraj_gen.desired_pos[:, i_foot:(
+                            i_foot+1)] = self.p_set_contact[i_foot:(i_foot+1), :].transpose()
 
             if (t % 0.3) > 0 and (t % 0.3) <= 0.15:  # Feet in swing phase moving upwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
 
-                        #self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
+                        # self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
                         self.move_traj_gen(i_foot, False)
                 else:
                     for i_foot in [1, 2]:
 
-                        #self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
+                        # self.move_vertical(i_foot, 0.0003, t, self.vdes, False)
                         self.move_traj_gen(i_foot, False)
             elif (t % 0.3) > 0.15:  # Feet in swing phase moving downwards during 0.15 s
                 if self.pair == 0:
                     for i_foot in [0, 3]:
 
-                        #self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
+                        # self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
                         self.move_traj_gen(i_foot, (t == 0.299))
                 else:
                     for i_foot in [1, 2]:
 
-                        #self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
+                        # self.move_vertical(i_foot, -0.0003, t, self.vdes, (t == 0.299))
                         self.move_traj_gen(i_foot, (t == 0.299))
 
             """for i_foot in range(4):
@@ -489,6 +500,8 @@ class controller:
             debug = 1
         if (np.abs(t % 0.294) < 0.005) or (np.abs(t % 0.3) > 0.2945):
             debug = 1
+        if (np.abs(t % 0.894) < 0.005) or (np.abs(t % 0.3) > 0.8945):
+            debug = 1
         debug = 0
 
         # Old code for smooth transition between the current position and the current target position
@@ -510,10 +523,15 @@ class controller:
             for i, name in enumerate(['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']):
                 pos_foot = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(name))
                 self.p_feet[i:(i+1), k_log, :] = pos_foot.translation.transpose()
+                self.p_vel[i:(i+1), k_log, :] = self.ftraj_gen.desired_vel[0:3, i].transpose()
+                self.p_acc[i:(i+1), k_log, :] = self.ftraj_gen.desired_acc[0:3, i].transpose()
 
                 self.p_contacts[i:(i+1), k_log, :] = self.p_set_contact[i, :]
 
                 self.p_tracking[i:(i+1), k_log, :] = self.feetGoal[i].translation.transpose()
+
+                pos_base = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
+                self.p_base[k_log, :] = pos_base.translation.transpose()
 
         # Resolution of the HQP problem
         HQPData = self.invdyn.computeProblemData(t, self.qtsid, self.vtsid)

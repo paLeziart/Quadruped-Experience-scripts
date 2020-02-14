@@ -19,7 +19,7 @@ import robots_loader
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 4200  # number of time steps simulated
+N_SIMULATION = 2100  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -42,7 +42,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.GUI)
+physicsClient = p.connect(p.DIRECT)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
@@ -175,8 +175,20 @@ plt.show()
 plt.figure(3)
 c = ["r", "g", "b", "k"]
 for i in range(3):
-    plt.subplot(3, 1, i+1)
+    plt.subplot(3, 3, 3*i+1)
     for k in range(1, 2):
         plt.plot(myController.p_traj_gen[k, :, i], color=c[k], linewidth=2)
         #plt.legend(["FL", "FR", "HL", "HR"])
+    plt.subplot(3, 3, 3*i+2)
+    for k in range(1, 2):
+        plt.plot(myController.p_vel[k, :, i], color=c[k], linewidth=2)
+    plt.subplot(3, 3, 3*i+3)
+    for k in range(1, 2):
+        plt.plot(myController.p_acc[k, :, i], color=c[k], linewidth=2)
+plt.show()
+
+plt.figure(4)
+for i in range(3):
+    plt.subplot(3, 1, i+1)
+    plt.plot(myController.p_base[:, i], linestyle='dotted', linewidth=2)
 plt.show()
