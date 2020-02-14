@@ -45,21 +45,27 @@ class controller:
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         # Coefficients of the posture task
-        kp_posture = 5000.0		# proportionnal gain of the posture task
+        kp_posture = 10.0		# proportionnal gain of the posture task
         w_posture = 1.0			# weight of the posture task
 
         # Coefficients of the contact tasks
-        kp_contact = 200000.0		# proportionnal gain for the contacts
-        self.w_forceRef = 1e-6		# weight of the forces regularization
+        kp_contact = 100.0		    # proportionnal gain for the contacts
+        self.w_forceRef = 1e-5		# weight of the forces regularization
 
         # Coefficients of the foot tracking task
-        kp_foot = 200000.0
-        self.w_foot = 1000.0
+        kp_foot = 100.0		        # proportionnal gain for the tracking task
+        self.w_foot = 1000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([20000, 20000, 20000, 10000, 10000, 10000]).T
         w_trunk = 1000
 
+        # Coefficients of the CoM task
+        self.kp_com = 100
+        self.w_com = 1000
+        offset_x_com = - 0.05  # offset along X for the reference position of the CoM
+
+        # Arrays to store logs
         k_max_loop = 1200
         self.f_pos = np.zeros((k_max_loop, 3))
         self.f_vel = np.zeros((k_max_loop, 3))
@@ -69,6 +75,7 @@ class controller:
         self.f_acc_ref = np.zeros((k_max_loop, 3))
         self.b_pos = np.zeros((k_max_loop, 6))
 
+        # Position of the shoulders in local frame
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
 
         # Foot trajectory generator
@@ -169,7 +176,7 @@ class controller:
 
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
-        self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        #self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
@@ -179,6 +186,26 @@ class controller:
         self.sampleTrunk.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleTrunk.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.trunkTask.setReference(self.sampleTrunk)
+
+        ############
+        # COM TASK #
+        ############
+
+        # Task definition
+        self.comTask = tsid.TaskComEquality("task-com", self.robot)
+        self.comTask.setKp(self.kp_com * matlib.ones(3).T)
+        self.comTask.setKd(2.0 * np.sqrt(self.kp_com) * matlib.ones(3).T)
+        self.invdyn.addMotionTask(self.comTask, self.w_com, 1, 0.0)
+
+        # Task reference
+        com_ref = self.robot.com(self.invdyn.data())
+        self.trajCom = tsid.TrajectoryEuclidianConstant("traj_com", com_ref)
+        self.sample_com = self.trajCom.computeNext()
+
+        tmp = self.sample_com.pos()  # Temp variable to store CoM position
+        tmp[0, 0] += offset_x_com
+        self.sample_com.pos(tmp)
+        self.comTask.setReference(self.sample_com)
 
         ##########
         # SOLVER #
@@ -232,9 +259,6 @@ class controller:
     ####################################################################
 
     def control(self, qmes12, vmes12, t, k_simu, solo):
-
-        if (k_simu % 50) == 0:
-            print("k_simu: ", k_simu)
 
         if k_simu == 0:
             self.qtsid = qmes12
@@ -295,6 +319,16 @@ class controller:
         self.vtsid += self.ades * dt
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
+        # Call display and log function
+        self.display_and_log(t, solo, k_simu)
+
+        # Placeholder torques for PyBullet
+        tau = np.zeros((12, 1))
+
+        return tau.flatten()
+
+    def display_and_log(self, t, solo, k_simu):
+
         if self.verbose:
             # Display target 3D positions of footholds with green spheres (gepetto gui)
             rgbt = [0.0, 1.0, 0.0, 0.5]
@@ -335,11 +369,6 @@ class controller:
 
         pos_trunk = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("base_link"))
         self.b_pos[k_simu:(k_simu+1), 0:3] = pos_trunk.translation[0:3].transpose()
-
-        # Placeholder torques for PyBullet
-        tau = np.zeros((12, 1))
-
-        return tau.flatten()
 
 # Parameters for the controller
 

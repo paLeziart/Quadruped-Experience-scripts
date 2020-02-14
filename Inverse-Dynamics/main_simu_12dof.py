@@ -145,7 +145,7 @@ for i in range(N_SIMULATION):
 
     # Refresh force monitoring for PyBullet
     # myForceMonitor.display_contact_forces()
-
+    # time.sleep(0.0015)
 
 # Plot the time spent to run each iteration of the loop
 
