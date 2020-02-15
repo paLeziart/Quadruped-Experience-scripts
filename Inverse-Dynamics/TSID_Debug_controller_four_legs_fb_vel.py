@@ -182,7 +182,7 @@ class controller:
 
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
-        # self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
@@ -288,6 +288,15 @@ class controller:
                 self.sampleFeet[i_foot] = footTraj.computeNext()
 
                 self.pos_contact[i_foot] = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0])
+        else:
+            # Encoders (position of joints)
+            self.qtsid[7:] = qmes12[7:]
+
+            # Gyroscopes (angular velocity of trunk)
+            self.vtsid[3:6] = vmes12[3:6]
+
+            # IMU estimation of orientation of the trunk
+            self.qtsid[3:7] = qmes12[3:7]
 
         ################
         # UPDATE TASKS #
@@ -419,8 +428,8 @@ class controller:
                                                    pos_foot.translation[2, 0], 1., 0., 0., 0.))
 
             # Refresh gepetto gui with TSID desired joint position
-            # solo.viewer.gui.refresh()
-            # solo.display(self.qtsid)
+            solo.viewer.gui.refresh()
+            solo.display(self.qtsid)
 
         # Log pos, vel, acc of the flying foot
         for i_foot in range(4):

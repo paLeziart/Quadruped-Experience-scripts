@@ -19,7 +19,7 @@ import robots_loader
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 7200  # number of time steps simulated
+N_SIMULATION = 4200  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -42,7 +42,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.GUI)
+physicsClient = p.connect(p.DIRECT)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
@@ -145,7 +145,7 @@ for i in range(N_SIMULATION):
 
     # Refresh force monitoring for PyBullet
     #myForceMonitor.display_contact_forces()
-    #time.sleep(0.001)
+    # time.sleep(0.001)
 
 # Plot the time spent to run each iteration of the loop
 
