@@ -7,7 +7,7 @@ import pybullet_data
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_Debug_controller import controller, dt, q0, omega
+from TSID_Debug_controller_four_legs import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
@@ -19,7 +19,7 @@ import robots_loader
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 1200  # number of time steps simulated
+N_SIMULATION = 7200  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -144,8 +144,8 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    myForceMonitor.display_contact_forces()
-    time.sleep(0.001)
+    #myForceMonitor.display_contact_forces()
+    #time.sleep(0.001)
 
 # Plot the time spent to run each iteration of the loop
 
@@ -153,16 +153,16 @@ plt.figure(1)
 l_str = ["X", "Y", "Z"]
 for i in range(3):
     plt.subplot(3, 3, 3*i+1)
-    plt.plot(myController.f_pos_ref[:, i])
-    plt.plot(myController.f_pos[:, i])
+    plt.plot(myController.f_pos_ref[1, :, i])
+    plt.plot(myController.f_pos[1, :, i])
     plt.legend(["Ref pos along " + l_str[i], "Pos along " + l_str[i]])
     plt.subplot(3, 3, 3*i+2)
-    plt.plot(myController.f_vel_ref[:, i])
-    plt.plot(myController.f_vel[:, i])
+    plt.plot(myController.f_vel_ref[1, :, i])
+    plt.plot(myController.f_vel[1, :, i])
     plt.legend(["Ref vel along " + l_str[i], "Vel along " + l_str[i]])
     plt.subplot(3, 3, 3*i+3)
-    plt.plot(myController.f_acc_ref[:, i])
-    plt.plot(myController.f_acc[:, i])
+    plt.plot(myController.f_acc_ref[1, :, i])
+    plt.plot(myController.f_acc[1, :, i])
     plt.legend(["Ref acc along " + l_str[i], "Acc along " + l_str[i]])
 
 plt.figure(2)
