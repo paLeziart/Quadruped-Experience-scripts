@@ -24,7 +24,7 @@ class controller:
 
     def __init__(self, q0, omega, t):
 
-        self.q_ref = np.array([[0.0, 0.0, 0.235 - 0.01264513, 0.0, 0.0, 0.0, 1.0,
+        self.q_ref = np.array([[0.0, 0.0, 0.235 - 0.01205385, 0.0, 0.0, 0.0, 1.0,
                                 0.0, 0.8, -1.6, 0, 0.8, -1.6,
                                 0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()
 
@@ -182,7 +182,7 @@ class controller:
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
         self.trajTrunk = tsid.TrajectorySE3Constant("traj_base_link", self.trunk_ref)
         self.sampleTrunk = self.trajTrunk.computeNext()
-        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.235 - 0.01264513, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.235 - 0.01205385, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
         self.sampleTrunk.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleTrunk.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.trunkTask.setReference(self.sampleTrunk)
@@ -263,7 +263,7 @@ class controller:
         if k_simu == 0:
             self.qtsid = qmes12
             self.qtsid[:3] = np.zeros((3, 1))  # Discard x and y drift and height position
-            self.qtsid[2, 0] = 0.235 - 0.01264513
+            self.qtsid[2, 0] = 0.235 - 0.01205385
 
             self.footGoal = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("FR_FOOT"))
             self.footTraj = tsid.TrajectorySE3Constant("foot_traj", self.footGoal)
@@ -324,6 +324,20 @@ class controller:
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
+
+        # Check for NaN value
+        if np.any(np.isnan(tau_ff)):
+            # self.error = True
+            tau = np.zeros((12, 1))
+        else:
+            # Torque PD controller
+            P = 20.0  # 5  # 50
+            D = 0.05  # 0.05  #  0.2
+            torques12 = P * (self.qtsid[7:] - qmes12[7:]) + D * (self.vtsid[6:] - vmes12[6:]) # + tau_ff
+
+            # Saturation to limit the maximal torque
+            t_max = 2.5
+            tau = np.clip(torques12, -t_max, t_max)  # faster than np.maximum(a_min, np.minimum(a, a_max))
 
         return tau.flatten()
 

@@ -42,7 +42,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.DIRECT)
+physicsClient = p.connect(p.GUI)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
@@ -132,7 +132,7 @@ for i in range(N_SIMULATION):
                                 controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
     # Compute one step of simulation
-    # p.stepSimulation()
+    p.stepSimulation()
 
     # Time incrementation
     t += dt
@@ -144,8 +144,8 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    # myForceMonitor.display_contact_forces()
-    # time.sleep(0.0015)
+    myForceMonitor.display_contact_forces()
+    time.sleep(0.001)
 
 # Plot the time spent to run each iteration of the loop
 
@@ -173,7 +173,7 @@ for i in range(3):
     if i < 2:
         plt.plot(np.zeros((N_SIMULATION,)))
     else:
-        plt.plot((0.235 - 0.01264513) * np.ones((N_SIMULATION,)))
+        plt.plot((0.235 - 0.01205385) * np.ones((N_SIMULATION,)))
     plt.legend([l_str[i], "Reference"])
 plt.show()
 
