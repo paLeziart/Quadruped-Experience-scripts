@@ -48,7 +48,7 @@ class controller:
 
         # Coefficients of the posture task
         kp_posture = 10.0		# proportionnal gain of the posture task
-        w_posture = 10.0			# weight of the posture task
+        w_posture = 1.0			# weight of the posture task
 
         # Coefficients of the contact tasks
         kp_contact = 100.0		    # proportionnal gain for the contacts
@@ -56,7 +56,7 @@ class controller:
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0		        # proportionnal gain for the tracking task
-        self.w_foot = 100000.0		# weight of the tracking task
+        self.w_foot = 10000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([0.0, 0.0, 0.0, 10.0, 10.0, 10.0]).T
@@ -80,6 +80,7 @@ class controller:
         # Position of the shoulders in local frame
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
         self.footsteps = self.shoulders.copy()
+        self.memory_contacts = self.shoulders.copy()
 
         # Foot trajectory generator
         max_height_feet = 0.04
@@ -192,14 +193,14 @@ class controller:
 
         # Task definition (creating the task object)
         self.trunkTask = tsid.TaskSE3Equality("task-trunk", self.robot, 'base_link')
-        mask = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
+        mask = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 0.0]).T
         self.trunkTask.setKp(np.multiply(kp_trunk, mask))
         self.trunkTask.setKd(2.0 * np.sqrt(np.multiply(kp_trunk, mask)))
         self.trunkTask.useLocalFrame(False)
 
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
-        # self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
@@ -337,6 +338,9 @@ class controller:
 
         if k_simu == 1000:
             self.vu_m[0:2, 0:1] = np.array([[0.0, 0.1]]).transpose()
+            self.vtsid[0:2, 0:1] = np.array([[0.0, 0.1]]).transpose()
+        elif k_simu > 1000:
+            self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()
 
         """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
         c, s = np.cos(-RPY[2]), np.sin(-RPY[2])
@@ -347,7 +351,7 @@ class controller:
         self.fstep_planner.update_footsteps(self.v_ref, self.vu_m, self.t_stance,
                                             self.t_remaining, self.T_gait, self.h_ref)
 
-        self.footsteps = self.fstep_planner.footsteps
+        self.footsteps = self.memory_contacts + self.fstep_planner.footsteps
 
         # Rotate footsteps depending on TSID orientation
         """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
@@ -399,6 +403,7 @@ class controller:
                         pos_foot = self.robot.framePosition(
                             self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                         self.pos_contact[i_foot] = pos_foot.translation.transpose()
+                        self.memory_contacts[:, i_foot] = pos_foot.translation[0:2].flatten()
                         self.contacts[i_foot].setReference(pos_foot)
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
 
@@ -430,6 +435,7 @@ class controller:
                     pos_foot = self.robot.framePosition(
                         self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                     self.pos_contact[i_foot] = pos_foot.translation.transpose()
+                    self.memory_contacts[:, i_foot] = pos_foot.translation[0:2].flatten()
                     self.contacts[i_foot].setReference(pos_foot)
                     self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
 

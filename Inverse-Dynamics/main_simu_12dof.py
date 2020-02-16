@@ -7,7 +7,7 @@ import pybullet_data
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_Debug_controller_four_legs import controller, dt, q0, omega
+from TSID_Debug_controller_four_legs_fb_vel import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
@@ -19,7 +19,7 @@ import robots_loader
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 4200  # number of time steps simulated
+N_SIMULATION = 7200  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -42,7 +42,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.DIRECT)
+physicsClient = p.connect(p.GUI)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 

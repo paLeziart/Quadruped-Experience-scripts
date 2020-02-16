@@ -51,8 +51,8 @@ class FootstepPlanner:
         # Order of feet: FL, FR, HL, HR
 
         # Start with shoulder term
-        # p = np.zeros((2, 4))
-        p = np.tile(np.array([[0], [0]]), (1, 4)) + self.shoulders  # + np.dot(R, shoulders)
+        p = np.zeros((2, 4))
+        # p = np.tile(np.array([[0], [0]]), (1, 4)) + self.shoulders  # + np.dot(R, shoulders)
 
         # Shift initial position of contact outwards for more stability
         # p[1, :] += np.array([0.025, -0.025, 0.025, -0.025])
