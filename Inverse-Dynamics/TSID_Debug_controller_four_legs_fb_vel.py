@@ -12,6 +12,8 @@ import numpy as np
 import numpy.matlib as matlib
 import tsid
 import foot_trajectory_generator as ftg
+import FootstepPlanner
+import pybullet as pyb
 
 pin.switchToNumpyMatrix()
 
@@ -46,7 +48,7 @@ class controller:
 
         # Coefficients of the posture task
         kp_posture = 10.0		# proportionnal gain of the posture task
-        w_posture = 1.0			# weight of the posture task
+        w_posture = 10.0			# weight of the posture task
 
         # Coefficients of the contact tasks
         kp_contact = 100.0		    # proportionnal gain for the contacts
@@ -57,8 +59,8 @@ class controller:
         self.w_foot = 100000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
-        kp_trunk = np.matrix([0.0, 0.0, 0.0, 50.0, 50.0, 50.0]).T
-        w_trunk = 1000
+        kp_trunk = np.matrix([0.0, 0.0, 0.0, 10.0, 10.0, 10.0]).T
+        w_trunk = 1.0
 
         # Coefficients of the CoM task
         self.kp_com = 300
@@ -66,7 +68,7 @@ class controller:
         offset_x_com = - 0.00  # offset along X for the reference position of the CoM
 
         # Arrays to store logs
-        k_max_loop = 4200
+        k_max_loop = 7200
         self.f_pos = np.zeros((4, k_max_loop, 3))
         self.f_vel = np.zeros((4, k_max_loop, 3))
         self.f_acc = np.zeros((4, k_max_loop, 3))
@@ -77,6 +79,7 @@ class controller:
 
         # Position of the shoulders in local frame
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
+        self.footsteps = self.shoulders.copy()
 
         # Foot trajectory generator
         max_height_feet = 0.04
@@ -87,9 +90,18 @@ class controller:
         self.pair = 0
 
         # Rotation along the vertical axis
-        delta_yaw = (2 * np.pi / 10) * 0.001
+        delta_yaw = (2 * np.pi / 10) * t
         c, s = np.cos(delta_yaw), np.sin(delta_yaw)
         self.R_yaw = np.array([[c, s], [-s, c]])
+
+        # Footstep planner object
+        self.fstep_planner = FootstepPlanner.FootstepPlanner(0.03, self.shoulders, 0.001)
+        self.v_ref = np.zeros((6, 1))
+        self.vu_m = np.zeros((6, 1))
+        self.t_stance = 0.3
+        self.T_gait = 0.6
+        self.t_remaining = np.zeros((1, 4))
+        self.h_ref = 0.235 - 0.01205385
 
         ########################################################################
         #             Definition of the Model and TSID problem                 #
@@ -235,8 +247,8 @@ class controller:
     def update_feet_tasks(self, k_loop, pair):
 
         # Target (x, y) positions for both feet
-        x1 = self.shoulders[0, :]
-        y1 = self.shoulders[1, :]
+        x1 = self.footsteps[0, :]
+        y1 = self.footsteps[1, :]
 
         dt = 0.001  #  [s]
         t1 = 0.3  #  [s]
@@ -292,7 +304,7 @@ class controller:
                 footTraj = tsid.TrajectorySE3Constant("foot_traj", self.feetGoal[i_foot])
                 self.sampleFeet[i_foot] = footTraj.computeNext()
 
-                self.pos_contact[i_foot] = np.matrix([self.shoulders[0, i_foot], self.shoulders[1, i_foot], 0.0])
+                self.pos_contact[i_foot] = np.matrix([self.footsteps[0, i_foot], self.footsteps[1, i_foot], 0.0])
         """else:
             # Encoders (position of joints)
             self.qtsid[7:] = qmes12[7:]
@@ -303,17 +315,67 @@ class controller:
             # IMU estimation of orientation of the trunk
             self.qtsid[3:7] = qmes12[3:7]"""
 
+        #####################
+        # FOOTSTEPS PLANNER #
+        #####################
+
+        k_loop = (k_simu - 300) % 600
+
+        for i_foot in [1, 2]:
+            self.t_remaining[0, i_foot] = np.max((0.0, 0.3 * (300 - k_loop) * 0.001))
+        for i_foot in [0, 3]:
+            if k_loop < 300:
+                self.t_remaining[0, i_foot] = 0.0
+            else:
+                self.t_remaining[0, i_foot] = 0.3 * (600 - k_loop) * 0.001
+
+        # Get PyBullet velocity in local frame
+        """RPY = pyb.getEulerFromQuaternion(qmes12[3:7])
+        c, s = np.cos(RPY[2]), np.sin(RPY[2])
+        R = np.array([[c, s], [-s, c]])
+        self.vu_m[0:2, 0:1] = np.dot(R, vmes12[0:2,0:1])"""
+
+        if k_simu == 1000:
+            self.vu_m[0:2, 0:1] = np.array([[0.0, 0.1]]).transpose()
+
+        """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
+        c, s = np.cos(-RPY[2]), np.sin(-RPY[2])
+        R = np.array([[c, s], [-s, c]])
+        self.vtsid[0:2, 0:1] = np.dot(R, self.vu_m[0:2, 0:1])"""
+
+        # Update desired location of footsteps using the footsteps planner
+        self.fstep_planner.update_footsteps(self.v_ref, self.vu_m, self.t_stance,
+                                            self.t_remaining, self.T_gait, self.h_ref)
+
+        self.footsteps = self.fstep_planner.footsteps
+
+        # Rotate footsteps depending on TSID orientation
+        """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
+        c, s = np.cos(RPY[2]), np.sin(RPY[2])
+        R = np.array([[c, s], [-s, c]])
+        self.footsteps = np.dot(R, self.footsteps)"""
+
         #############################
         # UPDATE ROTATION ON ITSELF #
         #############################
 
-        self.shoulders = np.dot(self.R_yaw, self.shoulders)
+        # self.footsteps = np.dot(self.R_yaw, self.footsteps)
+
+        #######################
+        # UPDATE CoM POSITION #
+        #######################
+
+        tmp = self.sample_com.pos()  # Temp variable to store CoM position
+        tmp[0, 0] = np.mean(self.footsteps[0, :])
+        tmp[1, 0] = np.mean(self.footsteps[1, :])
+        self.sample_com.pos(tmp)
+        self.comTask.setReference(self.sample_com)
+
+        print("Desired position of CoM: ", tmp.transpose())
 
         ################
         # UPDATE TASKS #
         ################
-
-        k_loop = (k_simu - 300) % 600
 
         if k_simu >= 300:
             if k_loop == 0:  # Start swing phase
@@ -438,9 +500,17 @@ class controller:
                                                    pos_foot.translation[1, 0],
                                                    pos_foot.translation[2, 0], 1., 0., 0., 0.))
 
+            # Display target 3D positions of footholds with green spheres (gepetto gui)
+            rgbt = [0.0, 0.0, 1.0, 0.5]
+            for i in range(0, 4):
+                if (t == 0):
+                    solo.viewer.gui.addSphere("world/shoulder"+str(i), .02, rgbt)  # .1 is the radius
+                solo.viewer.gui.applyConfiguration(
+                    "world/shoulder"+str(i), (self.shoulders[0, i], self.shoulders[1, i], 0.0, 1., 0., 0., 0.))
+
             # Refresh gepetto gui with TSID desired joint position
-            """solo.viewer.gui.refresh()
-            solo.display(self.qtsid)"""
+            solo.viewer.gui.refresh()
+            solo.display(self.qtsid)
 
         # Log pos, vel, acc of the flying foot
         for i_foot in range(4):
