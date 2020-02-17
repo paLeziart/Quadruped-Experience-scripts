@@ -41,7 +41,7 @@ class controller:
         self.foot_frames = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
         # Constraining the contacts
-        mu = 1  				# friction coefficient
+        mu = 2  				# friction coefficient
         fMin = 1.0				# minimum normal force
         fMax = 100.0  			# maximum normal force
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
@@ -59,12 +59,12 @@ class controller:
         self.w_foot = 10000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
-        kp_trunk = np.matrix([0.0, 0.0, 0.0, 10.0, 10.0, 10.0]).T
-        w_trunk = 1.0
+        kp_trunk = np.matrix([0.0, 0.0, 0.0, 5.0, 5.0, 5.0]).T
+        w_trunk = 80.0
 
         # Coefficients of the CoM task
-        self.kp_com = 300
-        self.w_com = 1000
+        self.kp_com = 300  #  300
+        self.w_com = 1000.0  # 1000
         offset_x_com = - 0.00  # offset along X for the reference position of the CoM
 
         # Arrays to store logs
@@ -179,7 +179,8 @@ class controller:
 
         # Task definition (creating the task object)
         for i_foot in range(4):
-            self.feetTask[i_foot] = tsid.TaskSE3Equality("foot_track_" + str(i_foot), self.robot, self.foot_frames[i_foot])
+            self.feetTask[i_foot] = tsid.TaskSE3Equality(
+                "foot_track_" + str(i_foot), self.robot, self.foot_frames[i_foot])
             self.feetTask[i_foot].setKp(kp_foot * mask)
             self.feetTask[i_foot].setKd(2.0 * np.sqrt(kp_foot) * mask)
             self.feetTask[i_foot].setMask(mask)
@@ -206,7 +207,7 @@ class controller:
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
         self.trajTrunk = tsid.TrajectorySE3Constant("traj_base_link", self.trunk_ref)
         self.sampleTrunk = self.trajTrunk.computeNext()
-        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.235 - 0.01205385, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
         self.sampleTrunk.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleTrunk.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.trunkTask.setReference(self.sampleTrunk)
@@ -265,8 +266,10 @@ class controller:
 
             # Get desired 3D position
             [x0, dx0, ddx0,  y0, dy0, ddy0,  z0, dz0, ddz0, gx1, gy1] = (self.ftgs[i_foot]).get_next_foot(
-                self.sampleFeet[i_foot].pos()[0, 0], self.sampleFeet[i_foot].vel()[0, 0], self.sampleFeet[i_foot].acc()[1, 0],
-                self.sampleFeet[i_foot].pos()[1, 0], self.sampleFeet[i_foot].vel()[1, 0], self.sampleFeet[i_foot].acc()[1, 0],
+                self.sampleFeet[i_foot].pos()[0, 0], self.sampleFeet[i_foot].vel()[
+                    0, 0], self.sampleFeet[i_foot].acc()[1, 0],
+                self.sampleFeet[i_foot].pos()[1, 0], self.sampleFeet[i_foot].vel()[
+                    1, 0], self.sampleFeet[i_foot].acc()[1, 0],
                 x1[i_foot], y1[i_foot], t0,  t1, dt)
 
             # Get sample object
@@ -301,7 +304,8 @@ class controller:
             self.sampleFeet = 4*[None]
             self.pos_contact = 4*[None]
             for i_foot in range(4):
-                self.feetGoal[i_foot] = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+                self.feetGoal[i_foot] = self.robot.framePosition(
+                    self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                 footTraj = tsid.TrajectorySE3Constant("foot_traj", self.feetGoal[i_foot])
                 self.sampleFeet[i_foot] = footTraj.computeNext()
 
@@ -336,11 +340,18 @@ class controller:
         R = np.array([[c, s], [-s, c]])
         self.vu_m[0:2, 0:1] = np.dot(R, vmes12[0:2,0:1])"""
 
-        if k_simu == 1000:
+        """if k_simu == 1000:
             self.vu_m[0:2, 0:1] = np.array([[0.0, 0.1]]).transpose()
             self.vtsid[0:2, 0:1] = np.array([[0.0, 0.1]]).transpose()
         elif k_simu > 1000:
-            self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()
+            self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()"""
+
+        if k_simu == 1200:
+            self.vu_m[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
+            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
+        if k_simu == 6000:
+            self.vu_m[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
+            self.v_ref[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
 
         """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
         c, s = np.cos(-RPY[2]), np.sin(-RPY[2])
@@ -370,16 +381,32 @@ class controller:
         #######################
 
         tmp = self.sample_com.pos()  # Temp variable to store CoM position
+        """sx = 0.0
+        sy = 0.0
+        for i_foot in range(4):
+            sx += self.sampleFeet[i_foot].pos()[0]
+            sy += self.sampleFeet[i_foot].pos()[1]"""
         tmp[0, 0] = np.mean(self.footsteps[0, :])
         tmp[1, 0] = np.mean(self.footsteps[1, :])
         self.sample_com.pos(tmp)
         self.comTask.setReference(self.sample_com)
 
-        print("Desired position of CoM: ", tmp.transpose())
+        # print("Desired position of CoM: ", tmp.transpose())
 
         ################
         # UPDATE TASKS #
         ################
+
+        """if k_simu >= 6000:
+            c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5), \
+                0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5)
+            self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c]).T)
+            self.trunkTask.setReference(self.sampleTrunk)
+        elif k_simu >= 300:
+            c, s = 0.25 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.5 + np.pi * 0.5), \
+                0.25 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.5 + np.pi * 0.5)
+            self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c]).T)
+            self.trunkTask.setReference(self.sampleTrunk)"""
 
         if k_simu >= 300:
             if k_loop == 0:  # Start swing phase
@@ -515,8 +542,9 @@ class controller:
                     "world/shoulder"+str(i), (self.shoulders[0, i], self.shoulders[1, i], 0.0, 1., 0., 0., 0.))
 
             # Refresh gepetto gui with TSID desired joint position
-            solo.viewer.gui.refresh()
-            solo.display(self.qtsid)
+            if k_simu % 20 == 0:
+                solo.viewer.gui.refresh()
+                solo.display(self.qtsid)
 
         # Log pos, vel, acc of the flying foot
         for i_foot in range(4):
@@ -525,8 +553,10 @@ class controller:
             self.f_acc_ref[i_foot, k_simu:(k_simu+1), :] = self.sampleFeet[i_foot].acc()[0:3].transpose()
 
             pos = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-            vel = self.robot.frameVelocityWorldOriented(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-            acc = self.robot.frameAccelerationWorldOriented(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+            vel = self.robot.frameVelocityWorldOriented(
+                self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+            acc = self.robot.frameAccelerationWorldOriented(
+                self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
             self.f_pos[i_foot, k_simu:(k_simu+1), :] = pos.translation[0:3].transpose()
             self.f_vel[i_foot, k_simu:(k_simu+1), :] = vel.vector[0:3].transpose()
             self.f_acc[i_foot, k_simu:(k_simu+1), :] = acc.vector[0:3].transpose()

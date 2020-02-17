@@ -379,7 +379,7 @@ class controller:
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        self.display_and_log(t, solo, k_simu)
+        # self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
