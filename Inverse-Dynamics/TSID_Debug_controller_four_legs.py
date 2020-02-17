@@ -57,8 +57,8 @@ class controller:
         self.w_foot = 100000.0		# weight of the tracking task
 
         # Coefficients of the trunk task
-        kp_trunk = np.matrix([0.0, 0.0, 0.0, 50.0, 50.0, 50.0]).T
-        w_trunk = 1000
+        kp_trunk = np.matrix([0.0, 0.0, 0.0, 10.0, 10.0, 10.0]).T
+        w_trunk = 1
 
         # Coefficients of the CoM task
         self.kp_com = 300
@@ -161,7 +161,8 @@ class controller:
 
         # Task definition (creating the task object)
         for i_foot in range(4):
-            self.feetTask[i_foot] = tsid.TaskSE3Equality("foot_track_" + str(i_foot), self.robot, self.foot_frames[i_foot])
+            self.feetTask[i_foot] = tsid.TaskSE3Equality(
+                "foot_track_" + str(i_foot), self.robot, self.foot_frames[i_foot])
             self.feetTask[i_foot].setKp(kp_foot * mask)
             self.feetTask[i_foot].setKd(2.0 * np.sqrt(kp_foot) * mask)
             self.feetTask[i_foot].setMask(mask)
@@ -182,7 +183,7 @@ class controller:
 
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
-        # self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
@@ -247,8 +248,10 @@ class controller:
 
             # Get desired 3D position
             [x0, dx0, ddx0,  y0, dy0, ddy0,  z0, dz0, ddz0, gx1, gy1] = (self.ftgs[i_foot]).get_next_foot(
-                self.sampleFeet[i_foot].pos()[0, 0], self.sampleFeet[i_foot].vel()[0, 0], self.sampleFeet[i_foot].acc()[1, 0],
-                self.sampleFeet[i_foot].pos()[1, 0], self.sampleFeet[i_foot].vel()[1, 0], self.sampleFeet[i_foot].acc()[1, 0],
+                self.sampleFeet[i_foot].pos()[0, 0], self.sampleFeet[i_foot].vel()[
+                    0, 0], self.sampleFeet[i_foot].acc()[1, 0],
+                self.sampleFeet[i_foot].pos()[1, 0], self.sampleFeet[i_foot].vel()[
+                    1, 0], self.sampleFeet[i_foot].acc()[1, 0],
                 x1[i_foot], y1[i_foot], t0,  t1, dt)
 
             # Get sample object
@@ -283,7 +286,8 @@ class controller:
             self.sampleFeet = 4*[None]
             self.pos_contact = 4*[None]
             for i_foot in range(4):
-                self.feetGoal[i_foot] = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+                self.feetGoal[i_foot] = self.robot.framePosition(
+                    self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                 footTraj = tsid.TrajectorySE3Constant("foot_traj", self.feetGoal[i_foot])
                 self.sampleFeet[i_foot] = footTraj.computeNext()
 
@@ -292,6 +296,8 @@ class controller:
         ################
         # UPDATE TASKS #
         ################
+
+        self.qtsid[3:7] = qmes12[3:7]
 
         k_loop = (k_simu - 300) % 600
 
@@ -384,7 +390,7 @@ class controller:
             tau = np.zeros((12, 1))
         else:
             # Torque PD controller
-            P = 10.0  # 5  # 50
+            P = 2.0  # 5  # 50
             D = 0.05  # 0.05  #  0.2
             torques12 = P * (self.qtsid[7:] - qmes12[7:]) + D * (self.vtsid[6:] - vmes12[6:]) + tau_ff
 
@@ -419,8 +425,8 @@ class controller:
                                                    pos_foot.translation[2, 0], 1., 0., 0., 0.))
 
             # Refresh gepetto gui with TSID desired joint position
-            # solo.viewer.gui.refresh()
-            # solo.display(self.qtsid)
+            solo.viewer.gui.refresh()
+            solo.display(self.qtsid)
 
         # Log pos, vel, acc of the flying foot
         for i_foot in range(4):
@@ -429,8 +435,10 @@ class controller:
             self.f_acc_ref[i_foot, k_simu:(k_simu+1), :] = self.sampleFeet[i_foot].acc()[0:3].transpose()
 
             pos = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-            vel = self.robot.frameVelocityWorldOriented(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-            acc = self.robot.frameAccelerationWorldOriented(self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+            vel = self.robot.frameVelocityWorldOriented(
+                self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+            acc = self.robot.frameAccelerationWorldOriented(
+                self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
             self.f_pos[i_foot, k_simu:(k_simu+1), :] = pos.translation[0:3].transpose()
             self.f_vel[i_foot, k_simu:(k_simu+1), :] = vel.vector[0:3].transpose()
             self.f_acc[i_foot, k_simu:(k_simu+1), :] = acc.vector[0:3].transpose()
