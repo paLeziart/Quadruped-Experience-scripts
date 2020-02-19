@@ -14,6 +14,13 @@ import ForceMonitor
 import robots_loader
 from IPython import embed
 
+import Joystick
+import MpcSolver
+import settings
+import FootstepPlanner
+import FootTrajectoryGenerator
+from mpc_functions import *
+
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
