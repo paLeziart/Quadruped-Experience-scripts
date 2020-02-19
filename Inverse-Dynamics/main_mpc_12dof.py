@@ -7,7 +7,7 @@ import pybullet_data
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_Debug_controller_1LegRaised import controller, dt, q0, omega
+from TSID_Debug_controller_four_legs_fb_vel import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
@@ -21,9 +21,32 @@ import FootstepPlanner
 import FootTrajectoryGenerator
 from mpc_functions import *
 
+###########################################################
+#  Roll Pitch Yaw (3 x 1) to Quaternion function (4 x 1)  #
+###########################################################
+
+
+def getQuaternion(rpy):
+    c = np.cos(rpy*0.5)
+    s = np.sin(rpy*0.5)
+    cy = c[2, 0]
+    sy = s[2, 0]
+    cp = c[1, 0]
+    sp = s[1, 0]
+    cr = c[0, 0]
+    sr = s[0, 0]
+
+    w = cy * cp * cr + sy * sp * sr
+    x = cy * cp * sr - sy * sp * cr
+    y = sy * cp * sr + cy * sp * cr
+    z = sy * cp * cr - cy * sp * sr
+
+    return np.array([[x, y, z, w]]).transpose()
+
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
+
 
 # Simulation parameters
 N_SIMULATION = 4800  # number of time steps simulated
@@ -87,7 +110,7 @@ pyb.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=pyb.TOR
 pyb.setTimeStep(dt)
 
 #########################################
-#  Definition of parameters of the MPC  #
+#  Definition of parameters of the MPC  #
 #########################################
 
 # Position of the center of mass at the beginning
@@ -108,7 +131,7 @@ footholds_local = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15
 footholds_local_target = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
 
 # Maximum height at which the robot should lift its feet during swing phase
-# max_height_feet = 0.1
+# max_height_feet = 0.1
 
 # Lock target positions of footholds before touchdown
 t_lock_before_touchdown = 0.001
@@ -145,7 +168,7 @@ for i in range(N_SIMULATION):
     #####################
 
     # Run MPC once every 20 iterations of TSID
-    if i % 20 == 0:
+    if False and i % 20 == 0:
 
         k = int(i/20)
 
@@ -250,6 +273,18 @@ for i in range(N_SIMULATION):
         # Extract relevant information from the output of the QP solver
         mpc.retrieve_result(settings)
 
+        #########################
+        # UPDATE WORLD POSITION #
+        #########################
+
+        # Variation of position in world frame using the linear speed in local frame
+        c_yaw, s_yaw = np.cos(settings.q_w[5, 0]), np.sin(settings.q_w[5, 0])
+        R = np.array([[c_yaw, -s_yaw, 0], [s_yaw, c_yaw, 0], [0, 0, 1]])
+        settings.q_w[0:3, 0:1] += np.dot(R, mpc.vu[0:3, 0:1] * settings.dt)
+
+        # Variation of orientation in world frame using the angular speed in local frame
+        settings.q_w[3:6, 0] += mpc.vu[3:6, 0] * settings.dt
+
         #####################
         #  GEPETTO VIEWER   #
         #####################
@@ -266,8 +301,13 @@ for i in range(N_SIMULATION):
             # Display reference trajectory, predicted trajectory, desired contact forces, current velocity
             mpc.update_viewer(solo.viewer, (k == 0), settings)
 
+            qu_pinocchio = solo.q0
+            qu_pinocchio[0:3, 0:1] = settings.q_w[0:3, 0:1]
+            qu_pinocchio[3:7, 0:1] = getQuaternion(settings.q_w[3:6, 0:1])
+
             # Refresh the gepetto viewer display
-            solo.viewer.gui.refresh()
+            solo.display(qu_pinocchio)
+            # solo.viewer.gui.refresh()
 
         # Get measured position and velocity after one time step
         # settings.qu_m, settings.vu_m = low_pass_robot(qu, vu)
@@ -308,14 +348,14 @@ for i in range(N_SIMULATION):
         myController = myEmergencyStop"""
 
     # Retrieve the joint torques from the appropriate controller
-    # jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
+    jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
 
     # Set control torque for all joints
-    # pyb.setJointMotorControlArray(robotId, revoluteJointIndices,
-    #                              controlMode = pyb.TORQUE_CONTROL, forces = jointTorques)
+    pyb.setJointMotorControlArray(robotId, revoluteJointIndices,
+                                  controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
 
     # Compute one step of simulation
-    # p.stepSimulation()
+    pyb.stepSimulation()
 
     # Time incrementation
     t += dt
