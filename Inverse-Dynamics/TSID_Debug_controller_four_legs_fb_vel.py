@@ -48,27 +48,27 @@ class controller:
 
         # Coefficients of the posture task
         kp_posture = 10.0		# proportionnal gain of the posture task
-        w_posture = 1.0			# weight of the posture task
+        w_posture = 1.0         # weight of the posture task
 
         # Coefficients of the contact tasks
-        kp_contact = 100.0		    # proportionnal gain for the contacts
-        self.w_forceRef = 1e-5		# weight of the forces regularization
+        kp_contact = 100.0         # proportionnal gain for the contacts
+        self.w_forceRef = 1e-5     # weight of the forces regularization
 
         # Coefficients of the foot tracking task
-        kp_foot = 1.0		        # proportionnal gain for the tracking task
-        self.w_foot = 10000.0		# weight of the tracking task
+        kp_foot = 1.0               # proportionnal gain for the tracking task
+        self.w_foot = 10000.0       # weight of the tracking task
 
         # Coefficients of the trunk task
-        kp_trunk = np.matrix([0.0, 0.0, 0.0, 5.0, 5.0, 5.0]).T
-        w_trunk = 80.0
+        kp_trunk = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
+        w_trunk = 0.0
 
         # Coefficients of the CoM task
-        self.kp_com = 300  #  300
-        self.w_com = 1000.0  # 1000
+        self.kp_com = 300
+        self.w_com = 1000.0  #  1000.0
         offset_x_com = - 0.00  # offset along X for the reference position of the CoM
 
         # Arrays to store logs
-        k_max_loop = 7200
+        k_max_loop = 72000
         self.f_pos = np.zeros((4, k_max_loop, 3))
         self.f_vel = np.zeros((4, k_max_loop, 3))
         self.f_acc = np.zeros((4, k_max_loop, 3))
@@ -194,20 +194,22 @@ class controller:
 
         # Task definition (creating the task object)
         self.trunkTask = tsid.TaskSE3Equality("task-trunk", self.robot, 'base_link')
-        mask = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 0.0]).T
+        mask = np.matrix([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).T
         self.trunkTask.setKp(np.multiply(kp_trunk, mask))
         self.trunkTask.setKd(2.0 * np.sqrt(np.multiply(kp_trunk, mask)))
         self.trunkTask.useLocalFrame(False)
+        self.trunkTask.setMask(mask)
 
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
+        # if w_trunk > 0.0:
         self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
         self.trajTrunk = tsid.TrajectorySE3Constant("traj_base_link", self.trunk_ref)
         self.sampleTrunk = self.trajTrunk.computeNext()
-        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.235 - 0.01205385, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
         self.sampleTrunk.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleTrunk.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.trunkTask.setReference(self.sampleTrunk)
@@ -220,7 +222,8 @@ class controller:
         self.comTask = tsid.TaskComEquality("task-com", self.robot)
         self.comTask.setKp(self.kp_com * matlib.ones(3).T)
         self.comTask.setKd(2.0 * np.sqrt(self.kp_com) * matlib.ones(3).T)
-        self.invdyn.addMotionTask(self.comTask, self.w_com, 1, 0.0)
+        if self.w_com > 0.0:
+            self.invdyn.addMotionTask(self.comTask, self.w_com, 1, 0.0)
 
         # Task reference
         com_ref = self.robot.com(self.invdyn.data())
@@ -346,12 +349,12 @@ class controller:
         elif k_simu > 1000:
             self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()"""
 
-        if k_simu == 1200:
+        """if k_simu == 1500:
             self.vu_m[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
-            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
-        if k_simu == 6000:
+            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()"""
+        """if k_simu == 6000:
             self.vu_m[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
-            self.v_ref[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
+            self.v_ref[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()"""
 
         """RPY = pyb.getEulerFromQuaternion(self.qtsid[3:7])
         c, s = np.cos(-RPY[2]), np.sin(-RPY[2])
@@ -381,15 +384,18 @@ class controller:
         #######################
 
         tmp = self.sample_com.pos()  # Temp variable to store CoM position
-        """sx = 0.0
-        sy = 0.0
-        for i_foot in range(4):
-            sx += self.sampleFeet[i_foot].pos()[0]
-            sy += self.sampleFeet[i_foot].pos()[1]"""
         tmp[0, 0] = np.mean(self.footsteps[0, :])
         tmp[1, 0] = np.mean(self.footsteps[1, :])
         self.sample_com.pos(tmp)
+        """if k_simu >= 1500 and k_simu < 2000:
+            tmp = self.sample_com.vel()
+            tmp[0, 0] = + 0.1 * np.min((1.0, 1.0 - (2000 - k_simu) / 500))
+            self.sample_com.vel(tmp)"""
         self.comTask.setReference(self.sample_com)
+
+        """self.sampleTrunk.pos(np.matrix([tmp[0, 0], tmp[1, 0], 0.235 - 0.01205385,
+                                        1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.trunkTask.setReference(self.sampleTrunk)"""
 
         # print("Desired position of CoM: ", tmp.transpose())
 
@@ -397,15 +403,32 @@ class controller:
         # UPDATE TASKS #
         ################
 
+        # To follow a sinus in pitch then roll
         """if k_simu >= 6000:
             c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5), \
                 0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5)
             self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c]).T)
             self.trunkTask.setReference(self.sampleTrunk)
         elif k_simu >= 300:
-            c, s = 0.25 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.5 + np.pi * 0.5), \
-                0.25 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.5 + np.pi * 0.5)
+            c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5), \
+                0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.2 + np.pi * 0.5)
             self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c]).T)
+            self.trunkTask.setReference(self.sampleTrunk)"""
+
+        # To follow a sinus both in pitch and roll
+        """if k_simu >= 300:
+            c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.1 + np.pi * 0.5), \
+                0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.1 + np.pi * 0.5)
+            R1 = np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
+            c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.1 + np.pi * 0.5), \
+                0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.1 + np.pi * 0.5)
+            R2 = np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+            c, s = 0.2 * np.cos((k_simu - 300) * 0.001 * 2 * np.pi * 0.4 + np.pi * 0.5), \
+                0.2 * np.sin((k_simu - 300) * 0.001 * 2 * np.pi * 0.4 + np.pi * 0.5)
+            R3 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+            R = np.dot(R2, R1)
+            self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, R[0, 0], R[0, 1], R[0, 2],
+                                            R[1, 0], R[1, 1], R[1, 2], R[2, 0], R[2, 1], R[2, 2]]).T,)
             self.trunkTask.setReference(self.sampleTrunk)"""
 
         if k_simu >= 300:
@@ -430,7 +453,8 @@ class controller:
                         pos_foot = self.robot.framePosition(
                             self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                         self.pos_contact[i_foot] = pos_foot.translation.transpose()
-                        self.memory_contacts[:, i_foot] = pos_foot.translation[0:2].flatten()
+                        self.memory_contacts[:, i_foot] = self.footsteps[:,
+                                                                         i_foot]  #  pos_foot.translation[0:2].flatten()
                         self.contacts[i_foot].setReference(pos_foot)
                         self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
 
@@ -462,7 +486,7 @@ class controller:
                     pos_foot = self.robot.framePosition(
                         self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
                     self.pos_contact[i_foot] = pos_foot.translation.transpose()
-                    self.memory_contacts[:, i_foot] = pos_foot.translation[0:2].flatten()
+                    self.memory_contacts[:, i_foot] = self.footsteps[:, i_foot]  #  pos_foot.translation[0:2].flatten()
                     self.contacts[i_foot].setReference(pos_foot)
                     self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
 
@@ -483,6 +507,7 @@ class controller:
 
         # Torques, accelerations, velocities and configuration computation
         tau_ff = self.invdyn.getActuatorForces(self.sol)
+        self.fc = self.invdyn.getContactForces(self.sol)
         self.ades = self.invdyn.getAccelerations(self.sol)
         self.vtsid += self.ades * dt
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
@@ -499,8 +524,8 @@ class controller:
             tau = np.zeros((12, 1))
         else:
             # Torque PD controller
-            P = 10.0  # 5  # 50
-            D = 0.05  # 0.05  #  0.2
+            P = 3.0  # 10.0  # 5  # 50
+            D = 0.3  # 0.05  # 0.05  #  0.2
             torques12 = P * (self.qtsid[7:] - qmes12[7:]) + D * (self.vtsid[6:] - vmes12[6:]) + tau_ff
 
             # Saturation to limit the maximal torque
@@ -541,8 +566,60 @@ class controller:
                 solo.viewer.gui.applyConfiguration(
                     "world/shoulder"+str(i), (self.shoulders[0, i], self.shoulders[1, i], 0.0, 1., 0., 0., 0.))
 
+            # Display 3D positions of sampleFeet
+            """rgbt = [0.3, 1.0, 1.0, 0.5]
+            for i in range(0, 4):
+                if (t == 0):
+                    solo.viewer.gui.addSphere("world/sfeet"+str(i), .02, rgbt)  # .1 is the radius
+                solo.viewer.gui.applyConfiguration(
+                    "world/sfeet"+str(i), (self.sampleFeet[i].pos()[0, 0],
+                                           self.sampleFeet[i].pos()[1, 0],
+                                           self.sampleFeet[i].pos()[2, 0], 1., 0., 0., 0.))"""
+
+            # Display lines for contact forces
+            """if (t == 0):
+                for i in range(4):
+                    solo.viewer.gui.addCurve("world/force_curve"+str(i),
+                                             [[0., 0., 0.], [0., 0., 0.]], [1.0, 0.0, 0.0, 0.5])
+                    solo.viewer.gui.setCurveLineWidth("world/force_curve"+str(i), 8.0)
+                    solo.viewer.gui.setColor("world/force_curve"+str(i), [1.0, 0.0, 0.0, 0.5])
+            else:
+                if self.pair == 1:
+                    feet = [1, 2]
+                    feet_0 = [0, 3]
+                else:
+                    feet = [0, 3]
+                    feet_0 = [1, 2]
+
+                for i, i_foot in enumerate(feet):
+                    Kreduce = 0.04
+                    solo.viewer.gui.setCurvePoints("world/force_curve"+str(i_foot),
+                                                   [[self.memory_contacts[0, i_foot],
+                                                     self.memory_contacts[1, i_foot], 0.0],
+                                                    [self.memory_contacts[0, i_foot] + Kreduce * self.fc[3*i+0, 0],
+                                                     self.memory_contacts[1, i_foot] + Kreduce * self.fc[3*i+1, 0],
+                                                     Kreduce * self.fc[3*i+2, 0]]])
+                for i, i_foot in enumerate(feet_0):
+                    solo.viewer.gui.setCurvePoints("world/force_curve"+str(i_foot),
+                                                   [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])"""
+
+            """if (t == 0):
+                solo.viewer.gui.addCurve("world/orientation_curve",
+                                         [[0., 0., 0.], [0., 0., 0.]], [1.0, 0.0, 0.0, 0.5])
+                solo.viewer.gui.setCurveLineWidth("world/orientation_curve", 8.0)
+                solo.viewer.gui.setColor("world/orientation_curve", [1.0, 0.0, 0.0, 0.5])
+
+            pos_trunk = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("base_link"))
+            line_rot = np.dot(pos_trunk.rotation, np.array([[1, 0, 0]]).transpose())
+            solo.viewer.gui.setCurvePoints("world/orientation_curve",
+                                           [pos_trunk.translation.flatten().tolist()[0],
+                                            (pos_trunk.translation + line_rot).flatten().tolist()[0]])"""
+
+            """if k_simu == 0:
+                solo.viewer.gui.setRefreshIsSynchronous(False)"""
+
             # Refresh gepetto gui with TSID desired joint position
-            if k_simu % 20 == 0:
+            if k_simu % 50 == 0:
                 solo.viewer.gui.refresh()
                 solo.display(self.qtsid)
 
