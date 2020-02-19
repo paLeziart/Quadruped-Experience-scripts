@@ -50,9 +50,7 @@ class FootstepPlanner:
 
         # Order of feet: FL, FR, HL, HR
 
-        # Start with shoulder term
         p = np.zeros((2, 1))
-        # p = np.tile(np.array([[0], [0]]), (1, 4)) + self.shoulders  # + np.dot(R, shoulders)
 
         # Shift initial position of contact outwards for more stability
         # p[1, :] += np.array([0.025, -0.025, 0.025, -0.025])
@@ -79,6 +77,61 @@ class FootstepPlanner:
 
         # Update target_footholds_no_lock
         self.footsteps = np.tile(p, (1, 4))
+
+        return 0
+
+    def update_footsteps_mpc(self, vel_ref, vel_cur, t_stance, S, T, h):
+        """Returns a 2 by 4 matrix containing the [x, y]^T position of the next desired footholds for the four feet
+        For feet in a swing phase it is where they should land and for feet currently touching the ground it is
+        where they should land at the end of their next swing phase
+
+        Keyword arguments:
+        vel_ref -- reference velocity vector of the flying base (6 by 1, linear and angular stacked)
+        vel_cur -- current velocity vector of the flying base (6 by 1, linear and angular stacked)
+        t_stance -- duration of the stance phase
+        S -- contact sequence that defines the current gait
+        T -- period of the current gait
+        """
+
+        # Order of feet: FL, FR, HL, HR
+
+        # Start with shoulder term
+        p = np.tile(np.array([[0], [0]]), (1, 4)) + self.shoulders  # + np.dot(R, shoulders)
+
+        # Shift initial position of contact outwards for more stability
+        p[1, :] += np.array([0.025, -0.025, 0.025, -0.025])
+
+        # Add symmetry term
+        p += t_stance * 0.5 * vel_cur[0:2, 0:1]
+
+        # Add feedback term
+        p += self.k_feedback * (vel_cur[0:2, 0:1] - vel_ref[0:2, 0:1])
+
+        # Add centrifugal term
+        cross = np.cross(vel_cur[0:3, 0:1], vel_ref[3:6, 0:1], 0, 0).T
+        p += 0.5 * np.sqrt(h/self.g) * cross[0:2, 0:1]
+
+        # Time remaining before the end of the currrent swing phase
+        t_remaining = np.zeros((1, 4))
+        for i in range(4):
+            indexes_stance = (np.where(S[:, i] == True))[0]
+            indexes_swing = (np.where(S[:, i] == False))[0]
+            # index = (np.where(S[:, i] == True))[0][0]
+            if (S[0, i] == True) and (S[-1, i] == False):
+                t_remaining[0, i] = T
+            else:
+                index = (indexes_stance[indexes_stance > indexes_swing[0]])[0]
+                t_remaining[0, i] = index * self.dt
+
+        # Add velocity forecast
+        #  p += np.tile(v[0:2, 0:1], (1, 4)) * t_remaining
+        for i in range(4):
+            yaw = np.linspace(0, t_remaining[0, i]-self.dt, np.floor(t_remaining[0, i]/self.dt)) * vel_cur[5, 0]
+            p[0, i] += (self.dt * np.cumsum(vel_cur[0, 0] * np.cos(yaw) - vel_cur[1, 0] * np.sin(yaw)))[-1]
+            p[1, i] += (self.dt * np.cumsum(vel_cur[0, 0] * np.sin(yaw) + vel_cur[1, 0] * np.cos(yaw)))[-1]
+
+        # Update target_footholds_no_lock
+        self.footsteps = p
 
         return 0
 
