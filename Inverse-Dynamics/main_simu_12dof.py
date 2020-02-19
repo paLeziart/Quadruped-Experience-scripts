@@ -7,19 +7,19 @@ import pybullet_data
 import matplotlib.pylab as plt
 
 # import the controller class with its parameters
-from TSID_Debug_controller_four_legs_fb_vel import controller, dt, q0, omega
+from TSID_Debug_controller_1LegRaised import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
 import robots_loader
-
+from IPython import embed
 
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
 
 # Simulation parameters
-N_SIMULATION = 7200  # number of time steps simulated
+N_SIMULATION = 4800  # number of time steps simulated
 
 t = 0.0  				# time
 
@@ -42,7 +42,7 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.GUI)
+physicsClient = p.connect(p.DIRECT)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
@@ -125,6 +125,8 @@ for i in range(N_SIMULATION):
         myController = myEmergencyStop
 
     # Retrieve the joint torques from the appropriate controller
+    """if i == 0:
+        embed()"""
     jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
 
     # Set control torque for all joints
@@ -132,7 +134,7 @@ for i in range(N_SIMULATION):
                                 controlMode=p.TORQUE_CONTROL, forces=jointTorques)
 
     # Compute one step of simulation
-    p.stepSimulation()
+    # p.stepSimulation()
 
     # Time incrementation
     t += dt
@@ -144,28 +146,34 @@ for i in range(N_SIMULATION):
     t_list.append(time_spent)
 
     # Refresh force monitoring for PyBullet
-    #myForceMonitor.display_contact_forces()
+    # myForceMonitor.display_contact_forces()
     # time.sleep(0.001)
 
 # Plot the time spent to run each iteration of the loop
 
 plt.figure(1)
+plt.title("Trajectory of the front right foot over time")
 l_str = ["X", "Y", "Z"]
 for i in range(3):
-    plt.subplot(3, 3, 3*i+1)
+    plt.subplot(3, 1, 1*i+1)
     plt.plot(myController.f_pos_ref[1, :, i])
     plt.plot(myController.f_pos[1, :, i])
     plt.legend(["Ref pos along " + l_str[i], "Pos along " + l_str[i]])
-    plt.subplot(3, 3, 3*i+2)
+
+plt.figure()
+plt.title("Velocity of the front right foot over time")
+l_str = ["X", "Y", "Z"]
+for i in range(3):
+    plt.subplot(3, 1, 1*i+1)
     plt.plot(myController.f_vel_ref[1, :, i])
     plt.plot(myController.f_vel[1, :, i])
     plt.legend(["Ref vel along " + l_str[i], "Vel along " + l_str[i]])
-    plt.subplot(3, 3, 3*i+3)
+    """plt.subplot(3, 3, 3*i+3)
     plt.plot(myController.f_acc_ref[1, :, i])
     plt.plot(myController.f_acc[1, :, i])
-    plt.legend(["Ref acc along " + l_str[i], "Acc along " + l_str[i]])
+    plt.legend(["Ref acc along " + l_str[i], "Acc along " + l_str[i]])"""
 
-plt.figure(2)
+plt.figure()
 l_str = ["X", "Y", "Z", "Roll", "Pitch", "Yaw"]
 for i in range(3):
     plt.subplot(3, 1, i+1)
@@ -175,15 +183,24 @@ for i in range(3):
     else:
         plt.plot((0.235 - 0.01205385) * np.ones((N_SIMULATION,)))
     plt.legend([l_str[i], "Reference"])
+
+plt.figure()
+plt.title("Trajectory of the CoM over time")
+for i in range(3):
+    plt.subplot(3, 1, i+1)
+    plt.plot(myController.com_pos_ref[:, i], "b", linewidth=2)
+    plt.plot(myController.com_pos[:, i], "r", linewidth=2)
+    plt.legend(["Ref pos along " + l_str[0], "Pos along " + l_str[0]])
+
+
 plt.show()
 
+plt.figure(9)
+plt.plot(t_list, 'k+')
 plt.show()
 
 quit()
 
-"""plt.figure(1)
-plt.plot(t_list, 'k+')
-plt.show()"""
 
 plt.figure(2)
 c = ["r", "g", "b", "k"]

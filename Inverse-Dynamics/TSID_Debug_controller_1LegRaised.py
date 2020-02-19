@@ -60,15 +60,15 @@ class controller:
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([0.0, 0.0, 0.0, 10.0, 10.0, 10.0]).T
-        w_trunk = 500.0
+        w_trunk = 50.0
 
         # Coefficients of the CoM task
         self.kp_com = 300
-        self.w_com = 500.0  #  1000.0
+        self.w_com = 100.0  #  1000.0
         offset_x_com = - 0.00  # offset along X for the reference position of the CoM
 
         # Arrays to store logs
-        k_max_loop = 72000
+        k_max_loop = 4800
         self.f_pos = np.zeros((4, k_max_loop, 3))
         self.f_vel = np.zeros((4, k_max_loop, 3))
         self.f_acc = np.zeros((4, k_max_loop, 3))
@@ -76,6 +76,8 @@ class controller:
         self.f_vel_ref = np.zeros((4, k_max_loop, 3))
         self.f_acc_ref = np.zeros((4, k_max_loop, 3))
         self.b_pos = np.zeros((k_max_loop, 6))
+        self.com_pos = np.zeros((k_max_loop, 3))
+        self.com_pos_ref = np.zeros((k_max_loop, 3))
 
         # Position of the shoulders in local frame
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
@@ -428,7 +430,7 @@ class controller:
         tmp[0, 0] = np.mean(self.footsteps[0, :])
         tmp[1, 0] = np.mean(self.footsteps[1, :])
 
-        offset_com = 0.03
+        offset_com = 0.015
         if self.raised_foot == 0:
             tmp[0, 0] += -offset_com
             tmp[1, 0] += -offset_com
@@ -569,6 +571,8 @@ class controller:
         # HQP PROBLEM #
         ###############
 
+        if k_simu == 2951:
+            a = 1
         # Resolution of the HQP problem
         HQPData = self.invdyn.computeProblemData(t, self.qtsid, self.vtsid)
         self.sol = self.solver.solve(HQPData)
@@ -687,7 +691,7 @@ class controller:
                 solo.viewer.gui.setRefreshIsSynchronous(False)"""
 
             # Refresh gepetto gui with TSID desired joint position
-            if k_simu % 50 == 0:
+            if k_simu % 20 == 0:
                 solo.viewer.gui.refresh()
                 solo.display(self.qtsid)
 
@@ -709,6 +713,11 @@ class controller:
         # Log position of the base
         pos_trunk = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("base_link"))
         self.b_pos[k_simu:(k_simu+1), 0:3] = pos_trunk.translation[0:3].transpose()
+
+        # Log position and reference of the CoM
+        self.com_pos_ref[k_simu:(k_simu+1), 0:3] = self.sample_com.pos().transpose()
+        self.com_pos[k_simu:(k_simu+1), 0:3] = self.robot.com(self.invdyn.data()).transpose()
+
 
 # Parameters for the controller
 
