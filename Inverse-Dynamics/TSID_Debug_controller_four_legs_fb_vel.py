@@ -60,7 +60,7 @@ class controller:
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
-        w_trunk = 0.0
+        w_trunk = 80.0
 
         # Coefficients of the CoM task
         self.kp_com = 300
@@ -349,9 +349,9 @@ class controller:
         elif k_simu > 1000:
             self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()"""
 
-        """if k_simu == 1500:
+        if k_simu == 1500:
             self.vu_m[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
-            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()"""
+            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
         """if k_simu == 6000:
             self.vu_m[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
             self.v_ref[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()"""
