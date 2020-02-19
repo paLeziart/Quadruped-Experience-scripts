@@ -56,7 +56,7 @@ class FootTrajectoryGenerator:
 
         self.flag_initialisation = False
 
-    def update_desired_feet_pos(self, footsteps_target, S, S_dt, T, q_w, contacts):
+    def update_desired_feet_pos(self, footsteps_target, S, S_dt, T, q_w):
 
         # Initialisation of rotation from local frame to world frame
         c, s = np.cos(q_w[5, 0]), np.sin(q_w[5, 0])
