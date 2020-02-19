@@ -2,7 +2,7 @@
 
 import time
 import numpy as np
-import pybullet as p
+import pybullet as pyb
 import pybullet_data
 import matplotlib.pylab as plt
 
@@ -49,43 +49,83 @@ solo.display(solo.q0)
 ########################################################################
 
 # Start the client for PyBullet
-physicsClient = p.connect(p.DIRECT)
+physicsClient = pyb.connect(pyb.DIRECT)
 # p.GUI for graphical version
 # p.DIRECT for non-graphical version
 
 # Load horizontal plane
-p.setAdditionalSearchPath(pybullet_data.getDataPath())
-planeId = p.loadURDF("plane.urdf")
+pyb.setAdditionalSearchPath(pybullet_data.getDataPath())
+planeId = pyb.loadURDF("plane.urdf")
 
 # Set the gravity
-p.setGravity(0, 0, -9.81)
+pyb.setGravity(0, 0, -9.81)
 
 # Load Quadruped robot
 robotStartPos = [0, 0, 0.235]
-robotStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
-p.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
-robotId = p.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
+robotStartOrientation = pyb.getQuaternionFromEuler([0, 0, 0])
+pyb.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
+robotId = pyb.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
 
 # Disable default motor control for revolute joints
 revoluteJointIndices = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
-p.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlMode=p.VELOCITY_CONTROL,
-                            targetVelocities=[0.0 for m in revoluteJointIndices],
-                            forces=[0.0 for m in revoluteJointIndices])
+pyb.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlMode=pyb.VELOCITY_CONTROL,
+                              targetVelocities=[0.0 for m in revoluteJointIndices],
+                              forces=[0.0 for m in revoluteJointIndices])
 
 # Initialize the robot in a specific configuration
 straight_standing = np.array([[0, 0.8, -1.6, 0, 0.8, -1.6, 0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()
-p.resetJointStatesMultiDof(robotId, revoluteJointIndices, straight_standing)  # q0[7:])
+pyb.resetJointStatesMultiDof(robotId, revoluteJointIndices, straight_standing)  # q0[7:])
 
 # Enable torque control for revolute joints
 jointTorques = [0.0 for m in revoluteJointIndices]
-p.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=p.TORQUE_CONTROL, forces=jointTorques)
+pyb.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
 
 # Fix the base in the world frame
 # p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
 
 # Set time step for the simulation
-p.setTimeStep(dt)
+pyb.setTimeStep(dt)
 
+#########################################
+#  Definition of parameters of the MPC  #
+#########################################
+
+# Position of the center of mass at the beginning
+pos_CoM = np.array([[0.0], [0.0], [0.0]])
+
+# Initial position of contacts (under shoulders)
+settings.p_contacts = settings.shoulders.copy()
+
+# Initial (x, y) positions of footholds
+feet_target = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005], [0.0, 0.0, 0.0, 0.0]])
+p = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
+goal_on_ground = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
+
+# Initial (x, y) positions of footholds in the trunk frame
+footholds_local = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
+
+# Initial (x, y) target positions of footholds in the trunk frame
+footholds_local_target = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
+
+# Maximum height at which the robot should lift its feet during swing phase
+# max_height_feet = 0.1
+
+# Lock target positions of footholds before touchdown
+t_lock_before_touchdown = 0.001
+
+# Foot trajectory generator objects (one for each foot)
+# ftgs = [Foot_trajectory_generator(max_height_feet, t_lock_before_touchdown) for i in range(4)]
+
+# Number of loops
+k_max_loop = 300
+
+settings.h_ref = settings.qu_m[2, 0]
+
+# Position of the trunk in the world frame
+settings.q_w = (settings.qu_m).copy()
+
+# Enable display with gepetto-gui
+enable_gepetto_viewer = True
 
 ########################################################################
 #                             Simulator                                #
@@ -152,8 +192,8 @@ for i in range(N_SIMULATION):
             ftraj_gen.update_frame(settings.vu_m)
 
         # Update desired location of footsteps using the footsteps planner
-        fstep_planner.update_footsteps(settings.v_ref, settings.vu_m, settings.t_stance,
-                                       settings.S, settings.T_gait, settings.qu_m[2, 0])
+        fstep_planner.update_footsteps_mpc(settings.v_ref, settings.vu_m, settings.t_stance,
+                                           settings.S, settings.T_gait, settings.qu_m[2, 0])
 
         # Updating quantities expressed in world frame
         fstep_planner.update_world_frame(settings.q_w)
@@ -210,13 +250,39 @@ for i in range(N_SIMULATION):
         # Extract relevant information from the output of the QP solver
         mpc.retrieve_result(settings)
 
+        #####################
+        #  GEPETTO VIEWER   #
+        #####################
+
+        if enable_gepetto_viewer:
+
+            # Display non-locked target footholds with green spheres (gepetto gui)
+            fstep_planner.update_viewer(solo.viewer, (k == 0))
+
+            # Display locked target footholds with red spheres (gepetto gui)
+            # Display desired 3D position of feet with magenta spheres (gepetto gui)
+            ftraj_gen.update_viewer(solo.viewer, (k == 0))
+
+            # Display reference trajectory, predicted trajectory, desired contact forces, current velocity
+            mpc.update_viewer(solo.viewer, (k == 0), settings)
+
+            # Refresh the gepetto viewer display
+            solo.viewer.gui.refresh()
+
+        # Get measured position and velocity after one time step
+        # settings.qu_m, settings.vu_m = low_pass_robot(qu, vu)
+        settings.qu_m[[2, 3, 4]] = mpc.qu[[2, 3, 4]]  # coordinate in x, y, yaw is always 0 in local frame
+        settings.vu_m = mpc.vu
+
+        print("END OF MPC ITERATION")
+
     ####################################################################
     #                 Data collection from PyBullet                    #
     ####################################################################
 
-    jointStates = p.getJointStates(robotId, revoluteJointIndices)  # State of all joints
-    baseState = p.getBasePositionAndOrientation(robotId)  # Position and orientation of the trunk
-    baseVel = p.getBaseVelocity(robotId)  # Velocity of the trunk
+    jointStates = pyb.getJointStates(robotId, revoluteJointIndices)  # State of all joints
+    baseState = pyb.getBasePositionAndOrientation(robotId)  # Position and orientation of the trunk
+    baseVel = pyb.getBaseVelocity(robotId)  # Velocity of the trunk
 
     # Joints configuration and velocity vector for free-flyer + 12 actuators
     qmes12 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T,
@@ -231,24 +297,22 @@ for i in range(N_SIMULATION):
     ####################################################################
 
     # If the limit bounds are reached, controller is switched to a pure derivative controller
-    if(myController.error):
+    """if(myController.error):
         print("Safety bounds reached. Switch to a safety controller")
-        myController = mySafetyController
+        myController = mySafetyController"""
 
     # If the simulation time is too long, controller is switched to a zero torques controller
-    time_error = time_error or (time.time()-time_start > 0.01)
+    """time_error = time_error or (time.time()-time_start > 0.01)
     if (time_error):
         print("Computation time lasted to long. Switch to a zero torque control")
-        myController = myEmergencyStop
+        myController = myEmergencyStop"""
 
     # Retrieve the joint torques from the appropriate controller
-    """if i == 0:
-        embed()"""
-    jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
+    # jointTorques = myController.control(qmes12, vmes12, t, i, solo).reshape((12, 1))
 
     # Set control torque for all joints
-    p.setJointMotorControlArray(robotId, revoluteJointIndices,
-                                controlMode=p.TORQUE_CONTROL, forces=jointTorques)
+    # pyb.setJointMotorControlArray(robotId, revoluteJointIndices,
+    #                              controlMode = pyb.TORQUE_CONTROL, forces = jointTorques)
 
     # Compute one step of simulation
     # p.stepSimulation()
