@@ -130,6 +130,8 @@ class MpcSolver:
 
     def create_constraints_matrices(self, settings, solo, k_loop):
 
+        enable_timer = False
+
         t_test = clock()
 
         footholds_m = self.footholds.copy()
@@ -194,10 +196,11 @@ class MpcSolver:
         # A(0) being the current state of the robot
         # So we have nb_xf * n_x columns to store the Xi and nb_tot * n_f columns to store the Fi
 
-        t_test_diff = clock() - t_test
-        print("Initialization stuff:", t_test_diff)
+        if enable_timer:
+            t_test_diff = clock() - t_test
+            print("Initialization stuff:", t_test_diff)
 
-        t_test = clock()
+            t_test = clock()
 
         # M_row, _col and _data satisfy the relationship M[M_row[k], M_col[k]] = M_data[k]
         M_row = np.array([], dtype=np.int64)
@@ -234,8 +237,9 @@ class MpcSolver:
                            np.repeat(np.arange(0, self.n_x*(nb_xf-1), self.n_x), 18)))
         M_data = np.hstack((M_data, np.tile(A_data, (nb_xf-1,))))
 
-        t_test_diff = clock() - t_test
-        print("Fill A in M:", t_test_diff)
+        if enable_timer:
+            t_test_diff = clock() - t_test
+            print("Fill A in M:", t_test_diff)
 
         # Matrix L used for the equality constraints (L.X <= K)
         # with dimensions (nb_tot * 5, nb_xf * n_x + nb_tot * n_f)
@@ -441,10 +445,11 @@ class MpcSolver:
         # N = - g [0 0 0 0 0 0 0 0 1 0 0 0]^T - A*X0 + ( - A*X0ref + X1ref) for the first row
         # N = - g [0 0 0 0 0 0 0 0 1 0 0 0]^T        + ( - A*Xkref + Xk+1ref) for the other rows
 
-        t_test_diff = clock() - t_test
-        print("Create L and M:", t_test_diff)
+        if enable_timer:
+            t_test_diff = clock() - t_test
+            print("Create L and M:", t_test_diff)
 
-        t_test = clock()
+            t_test = clock()
 
         N = np.zeros((self.n_x*nb_xf, 1))
 
@@ -520,10 +525,11 @@ class MpcSolver:
             D_col = np.hstack((D_col, np.array([9, 10,  9, 10, 11]) + (i*self.n_x)))
             D_data = np.hstack((D_data, np.array([c, s, -s, c, 1])))
 
-        t_test_diff = clock() - t_test
-        print("Create K and N:", t_test_diff)
+        if enable_timer:
+            t_test_diff = clock() - t_test
+            print("Create K and N:", t_test_diff)
 
-        t_test = clock()
+            t_test = clock()
 
         # Convert _row, _col and _data into Compressed Sparse Column matrices (Scipy)
         M_csc = scipy.sparse.csc.csc_matrix((M_data, (M_row, M_col)), shape=(
@@ -533,8 +539,9 @@ class MpcSolver:
             nb_tot * 5, nb_xf * self.n_x + nb_tot * self.n_f))
         K_csc = scipy.sparse.csc.csc_matrix((K_data, (K_row, K_col)), shape=(n_tmp*5, 1))
 
-        t_test_diff = clock() - t_test
-        print("Conversion to Csc:", t_test_diff)
+        if enable_timer:
+            t_test_diff = clock() - t_test
+            print("Conversion to Csc:", t_test_diff)
 
         # Include D*xref to N which already contains - g - A*X0 (first row) or just - g (other rows)
         N = N + np.dot(D, (self.xref[:, 1:]).reshape((-1, 1), order='F'))
