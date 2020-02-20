@@ -405,13 +405,14 @@ for i in range(3):
         plt.plot((0.235 - 0.01205385) * np.ones((N_SIMULATION,)))
     plt.legend([l_str[i], "Reference"])
 
-plt.figure()
-plt.title("Trajectory of the CoM over time")
-for i in range(3):
-    plt.subplot(3, 1, i+1)
-    plt.plot(myController.com_pos_ref[:, i], "b", linewidth=2)
-    plt.plot(myController.com_pos[:, i], "r", linewidth=2)
-    plt.legend(["Ref pos along " + l_str[0], "Pos along " + l_str[0]])
+if hasattr(myController, 'com_pos_ref'):
+    plt.figure()
+    plt.title("Trajectory of the CoM over time")
+    for i in range(3):
+        plt.subplot(3, 1, i+1)
+        plt.plot(myController.com_pos_ref[:, i], "b", linewidth=2)
+        plt.plot(myController.com_pos[:, i], "r", linewidth=2)
+        plt.legend(["Ref pos along " + l_str[0], "Pos along " + l_str[0]])
 
 
 plt.show()

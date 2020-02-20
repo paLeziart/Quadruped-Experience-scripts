@@ -60,7 +60,7 @@ class controller:
 
         # Coefficients of the trunk task
         kp_trunk = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
-        w_trunk = 80.0
+        w_trunk = 30.0
 
         # Coefficients of the CoM task
         self.kp_com = 300
@@ -88,7 +88,7 @@ class controller:
         self.ftgs = [ftg.Foot_trajectory_generator(max_height_feet, t_lock_before_touchdown) for i in range(4)]
 
         # Which pair of feet is active (0 for [1, 2] and 1 for [0, 3])
-        self.pair = 0
+        self.pair = -1
 
         # Rotation along the vertical axis
         delta_yaw = (2 * np.pi / 10) * t
@@ -256,13 +256,15 @@ class controller:
         y1 = self.footsteps[1, :]
 
         dt = 0.001  #  [s]
-        t1 = 0.3  #  [s]
+        t1 = 0.28  #  [s]
 
-        if pair == 0:
-            t0 = (k_loop / 300) * t1
+        if pair == -1:
+            return 0
+        elif pair == 0:
+            t0 = ((k_loop-20) / 280) * t1
             feet = [1, 2]
         else:
-            t0 = ((k_loop-300) / 300) * t1
+            t0 = ((k_loop-320) / 280) * t1
             feet = [0, 3]
 
         for i_foot in feet:
@@ -435,17 +437,10 @@ class controller:
             if k_loop == 0:  # Start swing phase
 
                 # Update active feet pair
-                self.pair = 0
+                self.pair = -1
 
                 # Update the foot tracking tasks
                 self.update_feet_tasks(k_loop, self.pair)
-
-                for i_foot in [1, 2]:
-                    # Disable the contacts for both feet (1 and 2)
-                    self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
-
-                    # Enable the foot tracking task for both feet (1 and 2)
-                    self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
 
                 if k_simu >= 900:
                     for i_foot in [0, 3]:
@@ -461,12 +456,47 @@ class controller:
                         # Disable both foot tracking tasks
                         self.invdyn.removeTask("foot_track_" + str(i_foot), 0.0)
 
-            elif k_loop > 0 and k_loop < 300:
+            elif k_loop == 20:
+
+                # Update active feet pair
+                self.pair = 0
+
+                # Update the foot tracking tasks
+                self.update_feet_tasks(k_loop, self.pair)
+
+                for i_foot in [1, 2]:
+                    # Disable the contacts for both feet (1 and 2)
+                    self.invdyn.removeRigidContact(self.foot_frames[i_foot], 0.0)
+
+                    # Enable the foot tracking task for both feet (1 and 2)
+                    self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
+
+            elif k_loop > 20 and k_loop < 300:
 
                 # Update the foot tracking tasks
                 self.update_feet_tasks(k_loop, self.pair)
 
             elif k_loop == 300:
+
+                # Update active feet pair
+                self.pair = -1
+
+                # Update the foot tracking tasks
+                self.update_feet_tasks(k_loop, self.pair)
+
+                for i_foot in [1, 2]:
+                    # Update the position of the contacts and enable them
+                    pos_foot = self.robot.framePosition(
+                        self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
+                    self.pos_contact[i_foot] = pos_foot.translation.transpose()
+                    self.memory_contacts[:, i_foot] = self.footsteps[:, i_foot]  #  pos_foot.translation[0:2].flatten()
+                    self.contacts[i_foot].setReference(pos_foot)
+                    self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
+
+                    # Disable both foot tracking tasks
+                    self.invdyn.removeTask("foot_track_" + str(i_foot), 0.0)
+
+            elif k_loop == 320:
 
                 # Update active feet pair
                 self.pair = 1
@@ -481,17 +511,6 @@ class controller:
                     # Enable the foot tracking task for both feet (0 and 3)
                     self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
 
-                for i_foot in [1, 2]:
-                    # Update the position of the contacts and enable them
-                    pos_foot = self.robot.framePosition(
-                        self.invdyn.data(), self.model.getFrameId(self.foot_frames[i_foot]))
-                    self.pos_contact[i_foot] = pos_foot.translation.transpose()
-                    self.memory_contacts[:, i_foot] = self.footsteps[:, i_foot]  #  pos_foot.translation[0:2].flatten()
-                    self.contacts[i_foot].setReference(pos_foot)
-                    self.invdyn.addRigidContact(self.contacts[i_foot], self.w_forceRef)
-
-                    # Disable both foot tracking tasks
-                    self.invdyn.removeTask("foot_track_" + str(i_foot), 0.0)
             else:
 
                 # Update the foot tracking tasks
