@@ -188,7 +188,7 @@ settings.h_ref = settings.qu_m[2, 0]
 settings.q_w = (settings.qu_m).copy()
 
 # Enable display with gepetto-gui
-enable_gepetto_viewer = True
+enable_gepetto_viewer = False
 
 ########################################################################
 #                             Simulator                                #
@@ -210,7 +210,7 @@ for k in range(int(N_SIMULATION/20)):
     if k == 0:
         settings.qu_m = np.array([[0.0, 0.0, 0.235 - 0.01205385, 0.0, 0.0, 0.0]]).transpose()
         settings.vu_m = np.zeros((6, 1))
-    elif k <= 180:
+    else:
         RPY = rotationMatrixToEulerAngles(myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).rotation)
         settings.qu_m[2] = myController.robot.framePosition(
@@ -368,7 +368,7 @@ for k in range(int(N_SIMULATION/20)):
     settings.qu_m[[2, 3, 4]] = mpc.qu[[2, 3, 4]]  # coordinate in x, y, yaw is always 0 in local frame
     settings.vu_m = mpc.vu
 
-    # print(mpc.f_applied)
+    print(mpc.f_applied)
     print("END OF MPC ITERATION")
 
     for i in range(20):

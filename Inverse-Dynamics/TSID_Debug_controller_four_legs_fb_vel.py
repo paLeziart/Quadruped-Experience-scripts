@@ -52,7 +52,7 @@ class controller:
 
         # Coefficients of the contact tasks
         kp_contact = 100.0         # proportionnal gain for the contacts
-        self.w_forceRef = 10     # weight of the forces regularization
+        self.w_forceRef = 10000.0  # weight of the forces regularization
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0               # proportionnal gain for the tracking task
@@ -166,6 +166,13 @@ class controller:
                  H_ref.translation[1, 0],
                  0.0]).T
             self.contacts[i].setReference(H_ref)
+
+            w_reg_f = 1
+            if i in [0, 1]:
+                self.contacts[i].setForceReference(np.matrix([0.0, 0.0, w_reg_f * 14.0]).T)
+            else:
+                self.contacts[i].setForceReference(np.matrix([0.0, 0.0, w_reg_f * 17.0]).T)
+            self.contacts[i].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
 
             # Adding the rigid contact after the reference contact force has been set
             self.invdyn.addRigidContact(self.contacts[i], self.w_forceRef)
@@ -405,22 +412,25 @@ class controller:
         # UPDATE REFERENC OF CONTACT FORCES #
         #####################################
 
-        """if k_loop >= 320:
-            for j, i_foot in enumerate([0, 3]):
-                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+        # TODO: Remove "w_reg_f *" in setForceReference once the tsid bug is fixed
+
+        """w_reg_f = 1000.0
+        if k_loop >= 320:
+            for j, i_foot in enumerate([1, 2]):
+                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
         elif k_loop >= 300:
             for j, i_foot in enumerate([0, 1, 2, 3]):
-                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
         elif k_loop >= 20:
-            for j, i_foot in enumerate([1, 2]):
-                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+            for j, i_foot in enumerate([0, 3]):
+                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
         else:
             for j, i_foot in enumerate([0, 1, 2, 3]):
-                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)"""
+                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)"""
 
         ################
         # UPDATE TASKS #
@@ -548,13 +558,14 @@ class controller:
         # Torques, accelerations, velocities and configuration computation
         tau_ff = self.invdyn.getActuatorForces(self.sol)
         self.fc = self.invdyn.getContactForces(self.sol)
+        print(k_simu, " : ", self.fc.transpose())
         # print(self.fc.transpose())
         self.ades = self.invdyn.getAccelerations(self.sol)
         self.vtsid += self.ades * dt
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        # self.display_and_log(t, solo, k_simu)
+        self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
@@ -660,7 +671,7 @@ class controller:
                 solo.viewer.gui.setRefreshIsSynchronous(False)"""
 
             # Refresh gepetto gui with TSID desired joint position
-            if k_simu % 50 == 0:
+            if k_simu % 1 == 0:
                 solo.viewer.gui.refresh()
                 solo.display(self.qtsid)
 
