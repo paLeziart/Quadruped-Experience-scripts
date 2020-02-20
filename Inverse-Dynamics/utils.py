@@ -1,6 +1,11 @@
 import math
 import numpy as np
 
+import robots_loader  # Gepetto viewer
+
+import pybullet as pyb  # Pybullet server
+import pybullet_data
+
 ##########################
 # ROTATION MATRIX TO RPY #
 ##########################
@@ -61,3 +66,64 @@ def getQuaternion(rpy):
     z = sy * cp * cr - cy * sp * sr
 
     return np.array([[x, y, z, w]]).transpose()
+
+########################################################################
+#                            Gepetto viewer                            #
+########################################################################
+
+
+def init_viewer():
+    solo = robots_loader.loadSolo(False)
+    solo.initDisplay(loadModel=True)
+    solo.viewer.gui.addFloor('world/floor')
+    solo.display(solo.q0)
+
+    return solo
+
+########################################################################
+#                              PyBullet                                #
+########################################################################
+
+
+class pybullet_simulator:
+
+    def __init__(self, dt=0.001):
+
+        # Start the client for PyBullet
+        physicsClient = pyb.connect(pyb.DIRECT)
+        # p.GUI for graphical version
+        # p.DIRECT for non-graphical version
+
+        # Load horizontal plane
+        pyb.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.planeId = pyb.loadURDF("plane.urdf")
+
+        # Set the gravity
+        pyb.setGravity(0, 0, -9.81)
+
+        # Load Quadruped robot
+        robotStartPos = [0, 0, 0.235]
+        robotStartOrientation = pyb.getQuaternionFromEuler([0, 0, 0])
+        pyb.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
+        self.robotId = pyb.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
+
+        # Disable default motor control for revolute joints
+        self.revoluteJointIndices = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
+        pyb.setJointMotorControlArray(self.robotId, jointIndices=self.revoluteJointIndices, controlMode=pyb.VELOCITY_CONTROL,
+                                      targetVelocities=[0.0 for m in self.revoluteJointIndices],
+                                      forces=[0.0 for m in self.revoluteJointIndices])
+
+        # Initialize the robot in a specific configuration
+        straight_standing = np.array([[0, 0.8, -1.6, 0, 0.8, -1.6, 0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()
+        pyb.resetJointStatesMultiDof(self.robotId, self.revoluteJointIndices, straight_standing)  # q0[7:])
+
+        # Enable torque control for revolute joints
+        jointTorques = [0.0 for m in self.revoluteJointIndices]
+        pyb.setJointMotorControlArray(self.robotId, self.revoluteJointIndices,
+                                      controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
+
+        # Fix the base in the world frame
+        # p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
+
+        # Set time step for the simulation
+        pyb.setTimeStep(dt)

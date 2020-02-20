@@ -11,7 +11,7 @@ from TSID_Debug_controller_four_legs_fb_vel import controller, dt, q0, omega
 import Safety_controller
 import EmergencyStop_controller
 import ForceMonitor
-import robots_loader
+
 from IPython import embed
 
 import Joystick
@@ -20,12 +20,11 @@ import settings
 import FootstepPlanner
 import FootTrajectoryGenerator
 from mpc_functions import *
-
+import utils
 
 ########################################################################
 #                        Parameters definition                         #
 ########################################################################
-
 
 # Simulation parameters
 N_SIMULATION = 14800  # number of time steps simulated
@@ -41,52 +40,13 @@ t_list = []
 #                            Gepetto viewer                            #
 ########################################################################
 
-solo = robots_loader.loadSolo(False)
-solo.initDisplay(loadModel=True)
-solo.viewer.gui.addFloor('world/floor')
-solo.display(solo.q0)
+solo = utils.init_viewer()
 
 ########################################################################
 #                              PyBullet                                #
 ########################################################################
 
-# Start the client for PyBullet
-physicsClient = pyb.connect(pyb.DIRECT)
-# p.GUI for graphical version
-# p.DIRECT for non-graphical version
-
-# Load horizontal plane
-pyb.setAdditionalSearchPath(pybullet_data.getDataPath())
-planeId = pyb.loadURDF("plane.urdf")
-
-# Set the gravity
-pyb.setGravity(0, 0, -9.81)
-
-# Load Quadruped robot
-robotStartPos = [0, 0, 0.235]
-robotStartOrientation = pyb.getQuaternionFromEuler([0, 0, 0])
-pyb.setAdditionalSearchPath("/opt/openrobots/share/example-robot-data/robots/solo_description/robots")
-robotId = pyb.loadURDF("solo12.urdf", robotStartPos, robotStartOrientation)
-
-# Disable default motor control for revolute joints
-revoluteJointIndices = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
-pyb.setJointMotorControlArray(robotId, jointIndices=revoluteJointIndices, controlMode=pyb.VELOCITY_CONTROL,
-                              targetVelocities=[0.0 for m in revoluteJointIndices],
-                              forces=[0.0 for m in revoluteJointIndices])
-
-# Initialize the robot in a specific configuration
-straight_standing = np.array([[0, 0.8, -1.6, 0, 0.8, -1.6, 0, -0.8, 1.6, 0, -0.8, 1.6]]).transpose()
-pyb.resetJointStatesMultiDof(robotId, revoluteJointIndices, straight_standing)  # q0[7:])
-
-# Enable torque control for revolute joints
-jointTorques = [0.0 for m in revoluteJointIndices]
-pyb.setJointMotorControlArray(robotId, revoluteJointIndices, controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
-
-# Fix the base in the world frame
-# p.createConstraint(robotId, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0, 0, 0], [0, 0, 0.34])
-
-# Set time step for the simulation
-pyb.setTimeStep(dt)
+pyb_sim = utils.pybullet_simulator()
 
 #########################################
 #  Definition of parameters of the MPC  #
@@ -136,7 +96,7 @@ enable_gepetto_viewer = True
 myController = controller(q0, omega, t)
 mySafetyController = Safety_controller.controller_12dof()
 myEmergencyStop = EmergencyStop_controller.controller_12dof()
-myForceMonitor = ForceMonitor.ForceMonitor(p, robotId, planeId)
+myForceMonitor = ForceMonitor.ForceMonitor(p, pyb_sim.robotId, pyb_sim.planeId)
 
 for k in range(int(N_SIMULATION/20)):
 
@@ -150,7 +110,7 @@ for k in range(int(N_SIMULATION/20)):
         settings.qu_m = np.array([[0.0, 0.0, 0.235 - 0.01205385, 0.0, 0.0, 0.0]]).transpose()
         settings.vu_m = np.zeros((6, 1))
     elif k <= 28:
-        RPY = rotationMatrixToEulerAngles(myController.robot.framePosition(
+        RPY = utils.rotationMatrixToEulerAngles(myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).rotation)
         settings.qu_m[2] = myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]
@@ -298,7 +258,7 @@ for k in range(int(N_SIMULATION/20)):
         qu_pinocchio[0:3, 0:1] = settings.q_w[0:3, 0:1]
         # TODO: Check why orientation of q_w and qu are different
         #qu_pinocchio[3:7, 0:1] = getQuaternion(settings.q_w[3:6, 0:1])
-        qu_pinocchio[3:7, 0:1] = getQuaternion(mpc.qu[3:6, 0:1])
+        qu_pinocchio[3:7, 0:1] = utils.getQuaternion(mpc.qu[3:6, 0:1])
 
         # Refresh the gepetto viewer display
         solo.display(qu_pinocchio)
@@ -320,9 +280,9 @@ for k in range(int(N_SIMULATION/20)):
         #                 Data collection from PyBullet                    #
         ####################################################################
 
-        jointStates = pyb.getJointStates(robotId, revoluteJointIndices)  # State of all joints
-        baseState = pyb.getBasePositionAndOrientation(robotId)  # Position and orientation of the trunk
-        baseVel = pyb.getBaseVelocity(robotId)  # Velocity of the trunk
+        jointStates = pyb.getJointStates(pyb_sim.robotId, pyb_sim.revoluteJointIndices)  # State of all joints
+        baseState = pyb.getBasePositionAndOrientation(pyb_sim.robotId)  # Position and orientation of the trunk
+        baseVel = pyb.getBaseVelocity(pyb_sim.robotId)  # Velocity of the trunk
 
         # Joints configuration and velocity vector for free-flyer + 12 actuators
         qmes12 = np.vstack((np.array([baseState[0]]).T, np.array([baseState[1]]).T,
@@ -351,7 +311,7 @@ for k in range(int(N_SIMULATION/20)):
         jointTorques = myController.control(qmes12, vmes12, t, i+20*k, solo, mpc).reshape((12, 1))
 
         # Set control torque for all joints
-        pyb.setJointMotorControlArray(robotId, revoluteJointIndices,
+        pyb.setJointMotorControlArray(pyb_sim.robotId, pyb_sim.revoluteJointIndices,
                                       controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
 
         # Compute one step of simulation
