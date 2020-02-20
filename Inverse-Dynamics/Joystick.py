@@ -40,13 +40,16 @@ class Joystick:
         if k == 701:
             settings.v_ref = np.array([[-0.0, -0.2, -0.0, 0, 0, -0.4]]).T"""
 
-        if k_loop == 151:
+        """if k_loop == 151:
             self.v_ref = np.array([[0.1, 0, 0.0, 0, 0, 0.4]]).T
         if k_loop == 301:
             self.v_ref = np.array([[0.1, 0, 0.0, 0, 0, -0.4]]).T
         if k_loop == 451:
             self.v_ref = np.array([[0.0, -0.1, 0.0, 0, 0, 0.0]]).T
         if k_loop == 600:
-            self.v_ref = np.array([[-0.1, 0.1, 0.0, 0, 0, -0.4]]).T
+            self.v_ref = np.array([[-0.1, 0.1, 0.0, 0, 0, -0.4]]).T"""
+
+        if k_loop == 75:
+            self.v_ref = np.array([[0.1, 0, 0.0, 0, 0, 0.0]]).T
 
         return 0

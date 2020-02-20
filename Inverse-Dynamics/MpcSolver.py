@@ -67,7 +67,7 @@ class MpcSolver:
         self.gI_inv = np.linalg.inv(gI)
 
         # Mass of the quadruped in [kg] (found in urdf)
-        self.m = 2.2
+        self.m = 2.9  # 2.2 in urdf for the trunk
 
     def getRefStatesDuringTrajectory(self, settings):
         """Returns the reference trajectory of the robot for each time step of the
@@ -582,9 +582,9 @@ class MpcSolver:
         P_data[0::12] = 1000  # position along x
         P_data[1::12] = 1000  # position along y
         P_data[2::12] = 300  # position along z
-        P_data[3::12] = 30  # roll
-        P_data[4::12] = 30  # pitch
-        P_data[5::12] = 30  # yaw
+        P_data[3::12] = 100  # roll
+        P_data[4::12] = 100  # pitch
+        P_data[5::12] = 100  # yaw
         P_data[6::12] = 30  # linear velocity along x
         P_data[7::12] = 30  # linear velocity along y
         P_data[8::12] = 300  # linear velocity along z

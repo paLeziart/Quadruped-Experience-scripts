@@ -52,7 +52,7 @@ class controller:
 
         # Coefficients of the contact tasks
         kp_contact = 100.0         # proportionnal gain for the contacts
-        self.w_forceRef = 1e-5     # weight of the forces regularization
+        self.w_forceRef = 10     # weight of the forces regularization
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0               # proportionnal gain for the tracking task
@@ -298,7 +298,7 @@ class controller:
     #                      Torque Control method                       #
     ####################################################################
 
-    def control(self, qmes12, vmes12, t, k_simu, solo):
+    def control(self, qmes12, vmes12, t, k_simu, solo, mpc):
 
         if k_simu == 0:
             self.qtsid = qmes12
@@ -329,7 +329,7 @@ class controller:
         # FOOTSTEPS PLANNER #
         #####################
 
-        k_loop = (k_simu - 300) % 600
+        k_loop = (k_simu - 0) % 600
 
         for i_foot in [1, 2]:
             self.t_remaining[0, i_foot] = np.max((0.0, 0.3 * (300 - k_loop) * 0.001))
@@ -401,6 +401,27 @@ class controller:
 
         # print("Desired position of CoM: ", tmp.transpose())
 
+        #####################################
+        # UPDATE REFERENC OF CONTACT FORCES #
+        #####################################
+
+        """if k_loop >= 320:
+            for j, i_foot in enumerate([0, 3]):
+                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+        elif k_loop >= 300:
+            for j, i_foot in enumerate([0, 1, 2, 3]):
+                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+        elif k_loop >= 20:
+            for j, i_foot in enumerate([1, 2]):
+                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)
+        else:
+            for j, i_foot in enumerate([0, 1, 2, 3]):
+                self.contacts[i_foot].setForceReference(np.matrix(mpc.f_applied[3*j:3*(j+1), 0]))
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([1., 1., 1.]).T)"""
+
         ################
         # UPDATE TASKS #
         ################
@@ -433,7 +454,7 @@ class controller:
                                             R[1, 0], R[1, 1], R[1, 2], R[2, 0], R[2, 1], R[2, 2]]).T,)
             self.trunkTask.setReference(self.sampleTrunk)"""
 
-        if k_simu >= 300:
+        if k_simu >= 0:
             if k_loop == 0:  # Start swing phase
 
                 # Update active feet pair
@@ -442,7 +463,7 @@ class controller:
                 # Update the foot tracking tasks
                 self.update_feet_tasks(k_loop, self.pair)
 
-                if k_simu >= 900:
+                if k_simu >= 600:
                     for i_foot in [0, 3]:
                         # Update the position of the contacts and enable them
                         pos_foot = self.robot.framePosition(
@@ -527,12 +548,13 @@ class controller:
         # Torques, accelerations, velocities and configuration computation
         tau_ff = self.invdyn.getActuatorForces(self.sol)
         self.fc = self.invdyn.getContactForces(self.sol)
+        # print(self.fc.transpose())
         self.ades = self.invdyn.getAccelerations(self.sol)
         self.vtsid += self.ades * dt
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        self.display_and_log(t, solo, k_simu)
+        # self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
