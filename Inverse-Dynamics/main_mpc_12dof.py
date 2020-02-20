@@ -188,7 +188,7 @@ settings.h_ref = settings.qu_m[2, 0]
 settings.q_w = (settings.qu_m).copy()
 
 # Enable display with gepetto-gui
-enable_gepetto_viewer = False
+enable_gepetto_viewer = True
 
 ########################################################################
 #                             Simulator                                #
@@ -210,16 +210,18 @@ for k in range(int(N_SIMULATION/20)):
     if k == 0:
         settings.qu_m = np.array([[0.0, 0.0, 0.235 - 0.01205385, 0.0, 0.0, 0.0]]).transpose()
         settings.vu_m = np.zeros((6, 1))
-    else:
+    elif k <= 28:
         RPY = rotationMatrixToEulerAngles(myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).rotation)
         settings.qu_m[2] = myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]
-        RPY[1] *= -1
+        RPY[1] *= 1
         settings.qu_m[3:, 0] = RPY
         settings.qu_m[0:2, 0] = np.array([0.0, 0.0])
         settings.qu_m[5, 0] = 0.0
         settings.vu_m = myController.vtsid[:6, 0:1]
+    else:
+        debug = 1
 
     ########################
     #  REFERENCE VELOCITY  #
@@ -356,7 +358,7 @@ for k in range(int(N_SIMULATION/20)):
         qu_pinocchio = solo.q0
         qu_pinocchio[0:3, 0:1] = settings.q_w[0:3, 0:1]
         # TODO: Check why orientation of q_w and qu are different
-        # qu_pinocchio[3:7, 0:1] = getQuaternion(settings.q_w[3:6, 0:1])
+        #qu_pinocchio[3:7, 0:1] = getQuaternion(settings.q_w[3:6, 0:1])
         qu_pinocchio[3:7, 0:1] = getQuaternion(mpc.qu[3:6, 0:1])
 
         # Refresh the gepetto viewer display

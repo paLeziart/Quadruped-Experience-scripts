@@ -51,5 +51,7 @@ class Joystick:
 
         if k_loop == 75:
             self.v_ref = np.array([[0.1, 0, 0.0, 0, 0, 0.0]]).T
+        """if k_loop == 151:
+            self.v_ref = np.array([[0.1, 0, 0.0, 0, 0, 0.4]]).T"""
 
         return 0

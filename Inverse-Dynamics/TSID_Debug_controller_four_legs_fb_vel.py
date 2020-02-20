@@ -52,7 +52,7 @@ class controller:
 
         # Coefficients of the contact tasks
         kp_contact = 100.0         # proportionnal gain for the contacts
-        self.w_forceRef = 10000.0  # weight of the forces regularization
+        self.w_forceRef = 1000.0  # weight of the forces regularization
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0               # proportionnal gain for the tracking task
@@ -167,12 +167,12 @@ class controller:
                  0.0]).T
             self.contacts[i].setReference(H_ref)
 
-            w_reg_f = 1
+            """w_reg_f = 100
             if i in [0, 1]:
                 self.contacts[i].setForceReference(np.matrix([0.0, 0.0, w_reg_f * 14.0]).T)
             else:
                 self.contacts[i].setForceReference(np.matrix([0.0, 0.0, w_reg_f * 17.0]).T)
-            self.contacts[i].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
+            self.contacts[i].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)"""
 
             # Adding the rigid contact after the reference contact force has been set
             self.invdyn.addRigidContact(self.contacts[i], self.w_forceRef)
@@ -210,7 +210,7 @@ class controller:
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
         # if w_trunk > 0.0:
-        self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        #self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
@@ -414,7 +414,7 @@ class controller:
 
         # TODO: Remove "w_reg_f *" in setForceReference once the tsid bug is fixed
 
-        """w_reg_f = 1000.0
+        w_reg_f = 1000.0
         if k_loop >= 320:
             for j, i_foot in enumerate([1, 2]):
                 self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
@@ -430,7 +430,7 @@ class controller:
         else:
             for j, i_foot in enumerate([0, 1, 2, 3]):
                 self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)"""
+                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
 
         ################
         # UPDATE TASKS #
@@ -565,7 +565,7 @@ class controller:
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        self.display_and_log(t, solo, k_simu)
+        #self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
@@ -629,7 +629,7 @@ class controller:
                                            self.sampleFeet[i].pos()[2, 0], 1., 0., 0., 0.))"""
 
             # Display lines for contact forces
-            """if (t == 0):
+            if (t == 0):
                 for i in range(4):
                     solo.viewer.gui.addCurve("world/force_curve"+str(i),
                                              [[0., 0., 0.], [0., 0., 0.]], [1.0, 0.0, 0.0, 0.5])
@@ -653,7 +653,7 @@ class controller:
                                                      Kreduce * self.fc[3*i+2, 0]]])
                 for i, i_foot in enumerate(feet_0):
                     solo.viewer.gui.setCurvePoints("world/force_curve"+str(i_foot),
-                                                   [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])"""
+                                                   [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
 
             """if (t == 0):
                 solo.viewer.gui.addCurve("world/orientation_curve",
@@ -671,7 +671,7 @@ class controller:
                 solo.viewer.gui.setRefreshIsSynchronous(False)"""
 
             # Refresh gepetto gui with TSID desired joint position
-            if k_simu % 1 == 0:
+            if k_simu % 4 == 0:
                 solo.viewer.gui.refresh()
                 solo.display(self.qtsid)
 

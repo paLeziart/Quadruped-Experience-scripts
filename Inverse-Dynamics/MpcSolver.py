@@ -67,7 +67,7 @@ class MpcSolver:
         self.gI_inv = np.linalg.inv(gI)
 
         # Mass of the quadruped in [kg] (found in urdf)
-        self.m = 2.9  # 2.2 in urdf for the trunk
+        self.m = 3.0  # 2.2 in urdf for the trunk
 
     def getRefStatesDuringTrajectory(self, settings):
         """Returns the reference trajectory of the robot for each time step of the
@@ -589,14 +589,14 @@ class MpcSolver:
         P_data[0::12] = 1000  # position along x
         P_data[1::12] = 1000  # position along y
         P_data[2::12] = 300  # position along z
-        P_data[3::12] = 100  # roll
-        P_data[4::12] = 100  # pitch
+        P_data[3::12] = 300  # roll
+        P_data[4::12] = 300  # pitch
         P_data[5::12] = 100  # yaw
         P_data[6::12] = 30  # linear velocity along x
         P_data[7::12] = 30  # linear velocity along y
         P_data[8::12] = 300  # linear velocity along z
-        P_data[9::12] = 30  # angular velocity along x
-        P_data[10::12] = 30  # angular velocity along y
+        P_data[9::12] = 100  # angular velocity along x
+        P_data[10::12] = 100  # angular velocity along y
         P_data[11::12] = 30  # angular velocity along z
 
         # Define weights for the force components of the optimization vector
@@ -628,8 +628,8 @@ class MpcSolver:
         f_temp = np.zeros((3*np.sum(settings.n_contacts)))
         # f_temp[2::3] = 2.2 * 9.81 / np.sum(settings.S[0,:])
         tmp = np.array(np.sum(settings.S, axis=1)).ravel().astype(int)
-        f_temp[2::3] = (np.repeat(tmp, tmp)-4) / (2 - 4) * (2.2 * 9.81 * 0.5) + \
-            (np.repeat(tmp, tmp)-2) / (4 - 2) * (2.2 * 9.81 * 0.25)
+        f_temp[2::3] = (np.repeat(tmp, tmp)-4) / (2 - 4) * (3.0 * 9.81 * 0.5) + \
+            (np.repeat(tmp, tmp)-2) / (4 - 2) * (3.0 * 9.81 * 0.25)
 
         # Initial guess (current state + guess for forces) to warm start the solver
         initx = np.hstack((np.zeros((self.xref.shape[0] * (self.xref.shape[1]-1),)), f_temp))
