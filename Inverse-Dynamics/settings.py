@@ -8,7 +8,7 @@ import numpy as np
 n_contacts = np.array([])
 dt = 0.02
 v_ref = np.array([[0.1, 0.00, 0.0, 0, 0, 0.0]]).T
-qu_m = np.array([[0, 0, 0.235 - 0.01205385, 0, 0, 0]]).T
+qu_m = np.array([[0, 0, 0.2027, 0, 0, 0]]).T  # 0.235 - 0.01205385
 vu_m = np.array([[0.0, 0.00, 0.0, 0, 0, 0.4]]).T
 t_stance = 0.3
 T_gait = 0.6

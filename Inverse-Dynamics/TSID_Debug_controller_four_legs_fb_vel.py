@@ -53,6 +53,7 @@ class controller:
         # Coefficients of the contact tasks
         kp_contact = 100.0         # proportionnal gain for the contacts
         self.w_forceRef = 1000.0  # weight of the forces regularization
+        self. w_reg_f = 1000.0
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0               # proportionnal gain for the tracking task
@@ -201,7 +202,7 @@ class controller:
 
         # Task definition (creating the task object)
         self.trunkTask = tsid.TaskSE3Equality("task-trunk", self.robot, 'base_link')
-        mask = np.matrix([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).T
+        mask = np.matrix([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).T
         self.trunkTask.setKp(np.multiply(kp_trunk, mask))
         self.trunkTask.setKd(2.0 * np.sqrt(np.multiply(kp_trunk, mask)))
         self.trunkTask.useLocalFrame(False)
@@ -210,13 +211,13 @@ class controller:
         # Add the task to the HQP with weight = w_trunk, priority level = 1 (not real constraint)
         # and a transition duration = 0.0
         # if w_trunk > 0.0:
-        #self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
+        # self.invdyn.addMotionTask(self.trunkTask, w_trunk, 1, 0.0)
 
         # TSID Trajectory (creating the trajectory object and linking it to the task)
         self.trunk_ref = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId('base_link'))
         self.trajTrunk = tsid.TrajectorySE3Constant("traj_base_link", self.trunk_ref)
         self.sampleTrunk = self.trajTrunk.computeNext()
-        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.235 - 0.01205385, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
+        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.2027, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).T)
         self.sampleTrunk.vel(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.sampleTrunk.acc(np.matrix([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).T)
         self.trunkTask.setReference(self.sampleTrunk)
@@ -229,8 +230,8 @@ class controller:
         self.comTask = tsid.TaskComEquality("task-com", self.robot)
         self.comTask.setKp(self.kp_com * matlib.ones(3).T)
         self.comTask.setKd(2.0 * np.sqrt(self.kp_com) * matlib.ones(3).T)
-        if self.w_com > 0.0:
-            self.invdyn.addMotionTask(self.comTask, self.w_com, 1, 0.0)
+        # if self.w_com > 0.0:
+        #    self.invdyn.addMotionTask(self.comTask, self.w_com, 1, 0.0)
 
         # Task reference
         com_ref = self.robot.com(self.invdyn.data())
@@ -392,14 +393,26 @@ class controller:
         # UPDATE CoM POSITION #
         #######################
 
-        tmp = self.sample_com.pos()  # Temp variable to store CoM position
+        """tmp = self.sample_com.pos()  # Temp variable to store CoM position
         tmp[0, 0] = np.mean(self.footsteps[0, :])
         tmp[1, 0] = np.mean(self.footsteps[1, :])
-        self.sample_com.pos(tmp)
+        self.sample_com.pos(tmp)"""
         """if k_simu >= 1500 and k_simu < 2000:
             tmp = self.sample_com.vel()
             tmp[0, 0] = + 0.1 * np.min((1.0, 1.0 - (2000 - k_simu) / 500))
             self.sample_com.vel(tmp)"""
+
+        tmp = self.sample_com.pos()  # Temp variable to store CoM position
+        tmp[0, 0] = np.mean(self.footsteps[0, :])
+        tmp[1, 0] = np.mean(self.footsteps[1, :])
+        self.sample_com.pos(tmp)
+        """tmp[0:3, 0] = mpc.vu[0:3, 0:1]
+        self.sample_com.vel(tmp)
+        mass = 3.0
+        tmp[0, 0] = np.sum(mpc.f_applied[0::3]) / mass
+        tmp[1, 0] = np.sum(mpc.f_applied[2::3]) / mass
+        tmp[2, 0] = np.sum(mpc.f_applied[3::3]) / mass - 9.81
+        self.sample_com.acc(tmp)"""
         self.comTask.setReference(self.sample_com)
 
         """self.sampleTrunk.pos(np.matrix([tmp[0, 0], tmp[1, 0], 0.235 - 0.01205385,
@@ -408,29 +421,55 @@ class controller:
 
         # print("Desired position of CoM: ", tmp.transpose())
 
+        #####################
+        # UPDATE TRUNK TASK #
+        #####################
+
+        """RPY = mpc.qu[3:6]
+        RPY[1, 0] *= -1  #  Pitch is inversed compared to MPC
+        c, s = np.cos(RPY[1, 0]), np.sin(RPY[1, 0])
+        R1 = np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
+        c, s = np.cos(RPY[0, 0]), np.sin(RPY[0, 0])
+        R2 = np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+        c, s = np.cos(RPY[2, 0]), np.sin(RPY[2, 0])
+        R3 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        R = np.dot(R3, np.dot(R2, R1))
+        self.sampleTrunk.pos(np.matrix([0.0, 0.0, 0.0, R[0, 0], R[0, 1], R[0, 2],
+                                        R[1, 0], R[1, 1], R[1, 2], R[2, 0], R[2, 1], R[2, 2]]).T,)
+
+        tmp = self.sampleTrunk.vel()
+        tmp[3:6, 0] = mpc.vu[3:6, 0:1]
+        tmp[4, 0] *= -1  #  Pitch is inversed compared to MPC
+        self.sampleTrunk.vel(tmp)"""
+
+        # TODO: Angular acceleration?
+
         #####################################
         # UPDATE REFERENC OF CONTACT FORCES #
         #####################################
 
         # TODO: Remove "w_reg_f *" in setForceReference once the tsid bug is fixed
 
-        w_reg_f = 1000.0
         if k_loop >= 320:
             for j, i_foot in enumerate([1, 2]):
-                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
+                self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(
+                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
         elif k_loop >= 300:
             for j, i_foot in enumerate([0, 1, 2, 3]):
-                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
+                self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(
+                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
         elif k_loop >= 20:
             for j, i_foot in enumerate([0, 3]):
-                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
+                self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(
+                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
         else:
             for j, i_foot in enumerate([0, 1, 2, 3]):
-                self.contacts[i_foot].setForceReference(w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
-                self.contacts[i_foot].setRegularizationTaskWeightVector(np.matrix([w_reg_f, w_reg_f, w_reg_f]).T)
+                self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+                self.contacts[i_foot].setRegularizationTaskWeightVector(
+                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
 
         ################
         # UPDATE TASKS #
@@ -565,7 +604,7 @@ class controller:
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        #self.display_and_log(t, solo, k_simu)
+        # self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))

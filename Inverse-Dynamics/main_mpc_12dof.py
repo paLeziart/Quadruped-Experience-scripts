@@ -107,18 +107,20 @@ for k in range(int(N_SIMULATION/20)):
     # Run MPC once every 20 iterations of TSID
 
     if k == 0:
-        settings.qu_m = np.array([[0.0, 0.0, 0.235 - 0.01205385, 0.0, 0.0, 0.0]]).transpose()
+        settings.qu_m = np.array([[0.0, 0.0, 0.2027, 0.0, 0.0, 0.0]]).transpose()
         settings.vu_m = np.zeros((6, 1))
-    elif k <= 28:
+    elif k <= 828:
         RPY = utils.rotationMatrixToEulerAngles(myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).rotation)
-        settings.qu_m[2] = myController.robot.framePosition(
-            myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]
-        RPY[1] *= 1
+        """settings.qu_m[2] = myController.robot.framePosition(
+            myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]"""
+        settings.qu_m[2] = myController.robot.com(myController.invdyn.data())[2]
+        # RPY[1] *= -1  # Pitch is inversed
         settings.qu_m[3:, 0] = RPY
         settings.qu_m[0:2, 0] = np.array([0.0, 0.0])
         settings.qu_m[5, 0] = 0.0
         settings.vu_m = myController.vtsid[:6, 0:1]
+        # settings.vu_m[4] *= -1  # Pitch is inversed
     else:
         debug = 1
 
@@ -362,7 +364,7 @@ for i in range(3):
     if i < 2:
         plt.plot(np.zeros((N_SIMULATION,)))
     else:
-        plt.plot((0.235 - 0.01205385) * np.ones((N_SIMULATION,)))
+        plt.plot((0.2027) * np.ones((N_SIMULATION,)))
     plt.legend([l_str[i], "Reference"])
 
 if hasattr(myController, 'com_pos_ref'):

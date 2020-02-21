@@ -604,9 +604,9 @@ class MpcSolver:
         P_col = np.hstack((P_col, np.arange(self.n_x * (settings.n_contacts).shape[0], self.G.shape[1], 1)))
         P_data = np.hstack((P_data, 0.0*np.ones((self.G.shape[1] - self.n_x * (settings.n_contacts).shape[0],))))
 
-        P_data[(self.n_x * (settings.n_contacts).shape[0])::3] = 0.01  # force along x
-        P_data[(self.n_x * (settings.n_contacts).shape[0] + 1)::3] = 0.01  # force along y
-        P_data[(self.n_x * (settings.n_contacts).shape[0] + 2)::3] = 0.01  # force along z
+        P_data[(self.n_x * (settings.n_contacts).shape[0])::3] = 0.0001  # force along x
+        P_data[(self.n_x * (settings.n_contacts).shape[0] + 1)::3] = 0.0001  # force along y
+        P_data[(self.n_x * (settings.n_contacts).shape[0] + 2)::3] = 0.0001  # force along z
 
         # Convert P into a csc matrix for the solver
         self.P = scipy.sparse.csc.csc_matrix((P_data, (P_row, P_col)), shape=(self.G.shape[1], self.G.shape[1]))
