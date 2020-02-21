@@ -52,8 +52,8 @@ class controller:
 
         # Coefficients of the contact tasks
         kp_contact = 100.0         # proportionnal gain for the contacts
-        self.w_forceRef = 1000.0  # weight of the forces regularization
-        self. w_reg_f = 1000.0
+        self.w_forceRef = 100.0  # weight of the forces regularization
+        self. w_reg_f = 100.0
 
         # Coefficients of the foot tracking task
         kp_foot = 1.0               # proportionnal gain for the tracking task
@@ -85,7 +85,7 @@ class controller:
 
         # Foot trajectory generator
         max_height_feet = 0.04
-        t_lock_before_touchdown = 0.15
+        t_lock_before_touchdown = 0.05
         self.ftgs = [ftg.Foot_trajectory_generator(max_height_feet, t_lock_before_touchdown) for i in range(4)]
 
         # Which pair of feet is active (0 for [1, 2] and 1 for [0, 3])
@@ -97,7 +97,7 @@ class controller:
         self.R_yaw = np.array([[c, s], [-s, c]])
 
         # Footstep planner object
-        self.fstep_planner = FootstepPlanner.FootstepPlanner(0.03, self.shoulders, 0.001)
+        self.fstep_planner = FootstepPlanner.FootstepPlanner(0.03, self.shoulders, 0.005)
         self.v_ref = np.zeros((6, 1))
         self.vu_m = np.zeros((6, 1))
         self.t_stance = 0.3
@@ -263,16 +263,16 @@ class controller:
         x1 = self.footsteps[0, :]
         y1 = self.footsteps[1, :]
 
-        dt = 0.001  #  [s]
-        t1 = 0.28  #  [s]
+        dt = 0.005  #  [s]
+        t1 = 0.3 - dt  #  0.28  #  [s]
 
         if pair == -1:
             return 0
         elif pair == 0:
-            t0 = ((k_loop-20) / 280) * t1
+            t0 = ((k_loop-1) / 59) * t1  #  ((k_loop-20) / 280) * t1
             feet = [1, 2]
         else:
-            t0 = ((k_loop-320) / 280) * t1
+            t0 = ((k_loop-61) / 59) * t1  # ((k_loop-320) / 280) * t1
             feet = [0, 3]
 
         for i_foot in feet:
@@ -337,15 +337,15 @@ class controller:
         # FOOTSTEPS PLANNER #
         #####################
 
-        k_loop = (k_simu - 0) % 600
+        k_loop = (k_simu - 0) % 120  # 600
 
         for i_foot in [1, 2]:
-            self.t_remaining[0, i_foot] = np.max((0.0, 0.3 * (300 - k_loop) * 0.001))
+            self.t_remaining[0, i_foot] = np.max((0.0, 0.3 * (60 - k_loop) * 0.005))
         for i_foot in [0, 3]:
-            if k_loop < 300:
+            if k_loop < 60:
                 self.t_remaining[0, i_foot] = 0.0
             else:
-                self.t_remaining[0, i_foot] = 0.3 * (600 - k_loop) * 0.001
+                self.t_remaining[0, i_foot] = 0.3 * (120 - k_loop) * 0.005
 
         # Get PyBullet velocity in local frame
         """RPY = pyb.getEulerFromQuaternion(qmes12[3:7])
@@ -450,17 +450,17 @@ class controller:
 
         # TODO: Remove "w_reg_f *" in setForceReference once the tsid bug is fixed
 
-        if k_loop >= 320:
+        if k_loop >= 61:  # 320:
             for j, i_foot in enumerate([1, 2]):
                 self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
                 self.contacts[i_foot].setRegularizationTaskWeightVector(
                     np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
-        elif k_loop >= 300:
+        elif k_loop >= 60:  # 300:
             for j, i_foot in enumerate([0, 1, 2, 3]):
                 self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
                 self.contacts[i_foot].setRegularizationTaskWeightVector(
                     np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
-        elif k_loop >= 20:
+        elif k_loop >= 1:  # 20:
             for j, i_foot in enumerate([0, 3]):
                 self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
                 self.contacts[i_foot].setRegularizationTaskWeightVector(
@@ -512,7 +512,7 @@ class controller:
                 # Update the foot tracking tasks
                 self.update_feet_tasks(k_loop, self.pair)
 
-                if k_simu >= 600:
+                if k_simu >= 120:  # 600:
                     for i_foot in [0, 3]:
                         # Update the position of the contacts and enable them
                         pos_foot = self.robot.framePosition(
@@ -526,7 +526,7 @@ class controller:
                         # Disable both foot tracking tasks
                         self.invdyn.removeTask("foot_track_" + str(i_foot), 0.0)
 
-            elif k_loop == 20:
+            elif k_loop == 1:
 
                 # Update active feet pair
                 self.pair = 0
@@ -541,12 +541,12 @@ class controller:
                     # Enable the foot tracking task for both feet (1 and 2)
                     self.invdyn.addMotionTask(self.feetTask[i_foot], self.w_foot, 1, 0.0)
 
-            elif k_loop > 20 and k_loop < 300:
+            elif k_loop > 1 and k_loop < 60:  # 300:
 
                 # Update the foot tracking tasks
                 self.update_feet_tasks(k_loop, self.pair)
 
-            elif k_loop == 300:
+            elif k_loop == 60:  # :300:
 
                 # Update active feet pair
                 self.pair = -1
@@ -566,7 +566,7 @@ class controller:
                     # Disable both foot tracking tasks
                     self.invdyn.removeTask("foot_track_" + str(i_foot), 0.0)
 
-            elif k_loop == 320:
+            elif k_loop == 61:  # 320:
 
                 # Update active feet pair
                 self.pair = 1
@@ -604,7 +604,7 @@ class controller:
         self.qtsid = pin.integrate(self.model, self.qtsid, self.vtsid * dt)
 
         # Call display and log function
-        # self.display_and_log(t, solo, k_simu)
+        self.display_and_log(t, solo, k_simu)
 
         # Placeholder torques for PyBullet
         tau = np.zeros((12, 1))
@@ -710,7 +710,7 @@ class controller:
                 solo.viewer.gui.setRefreshIsSynchronous(False)"""
 
             # Refresh gepetto gui with TSID desired joint position
-            if k_simu % 4 == 0:
+            if k_simu % 1 == 0:
                 solo.viewer.gui.refresh()
                 solo.display(self.qtsid)
 
@@ -736,7 +736,7 @@ class controller:
 # Parameters for the controller
 
 
-dt = 0.001				# controller time step
+dt = 0.005				# controller time step
 
 q0 = np.zeros((19, 1))  # initial configuration
 

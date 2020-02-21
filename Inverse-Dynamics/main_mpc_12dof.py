@@ -87,7 +87,7 @@ settings.h_ref = settings.qu_m[2, 0]
 settings.q_w = (settings.qu_m).copy()
 
 # Enable display with gepetto-gui
-enable_gepetto_viewer = True
+enable_gepetto_viewer = False
 
 ########################################################################
 #                             Simulator                                #
@@ -98,7 +98,7 @@ mySafetyController = Safety_controller.controller_12dof()
 myEmergencyStop = EmergencyStop_controller.controller_12dof()
 myForceMonitor = ForceMonitor.ForceMonitor(p, pyb_sim.robotId, pyb_sim.planeId)
 
-for k in range(int(N_SIMULATION/20)):
+for k in range(int(N_SIMULATION)):
 
     #####################
     #   MPC FUNCTIONS   #
@@ -274,7 +274,7 @@ for k in range(int(N_SIMULATION/20)):
     print(mpc.f_applied)
     print("END OF MPC ITERATION")
 
-    for i in range(20):
+    for i in range(1):
 
         time_start = time.time()
 
@@ -310,7 +310,7 @@ for k in range(int(N_SIMULATION/20)):
             myController = myEmergencyStop"""
 
         # Retrieve the joint torques from the appropriate controller
-        jointTorques = myController.control(qmes12, vmes12, t, i+20*k, solo, mpc).reshape((12, 1))
+        jointTorques = myController.control(qmes12, vmes12, t, i+k, solo, mpc).reshape((12, 1))
 
         # Set control torque for all joints
         pyb.setJointMotorControlArray(pyb_sim.robotId, pyb_sim.revoluteJointIndices,
