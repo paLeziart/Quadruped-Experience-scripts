@@ -47,7 +47,7 @@ class controller:
         contactNormal = np.matrix([0., 0., 1.]).T  # direction of the normal to the contact surface
 
         # Coefficients of the posture task
-        kp_posture = 10.0		# proportionnal gain of the posture task
+        kp_posture = 0.0		# proportionnal gain of the posture task
         w_posture = 1.0         # weight of the posture task
 
         # Coefficients of the contact tasks
@@ -69,7 +69,7 @@ class controller:
         offset_x_com = - 0.00  # offset along X for the reference position of the CoM
 
         # Arrays to store logs
-        k_max_loop = 72000
+        k_max_loop = 800
         self.f_pos = np.zeros((4, k_max_loop, 3))
         self.f_vel = np.zeros((4, k_max_loop, 3))
         self.f_acc = np.zeros((4, k_max_loop, 3))
@@ -77,6 +77,8 @@ class controller:
         self.f_vel_ref = np.zeros((4, k_max_loop, 3))
         self.f_acc_ref = np.zeros((4, k_max_loop, 3))
         self.b_pos = np.zeros((k_max_loop, 6))
+        self.com_pos = np.zeros((k_max_loop, 3))
+        self.com_pos_ref = np.zeros((k_max_loop, 3))
 
         # Position of the shoulders in local frame
         self.shoulders = np.array([[0.19, 0.19, -0.19, -0.19], [0.15005, -0.15005, 0.15005, -0.15005]])
@@ -359,9 +361,10 @@ class controller:
         elif k_simu > 1000:
             self.vu_m[0:2, 0:1] = self.vtsid[0:2, 0:1].copy()"""
 
-        if k_simu == 1500:
+        """if k_simu == 1500:
             self.vu_m[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
-            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()
+            self.v_ref[0:2, 0:1] = np.array([[0.1, 0.0]]).transpose()"""
+
         """if k_simu == 6000:
             self.vu_m[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()
             self.v_ref[0:2, 0:1] = np.array([[0.0, 0.0]]).transpose()"""
@@ -450,7 +453,7 @@ class controller:
 
         # TODO: Remove "w_reg_f *" in setForceReference once the tsid bug is fixed
 
-        if k_loop >= 61:  # 320:
+        """if k_loop >= 61:  # 320:
             for j, i_foot in enumerate([1, 2]):
                 self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
                 self.contacts[i_foot].setRegularizationTaskWeightVector(
@@ -469,7 +472,12 @@ class controller:
             for j, i_foot in enumerate([0, 1, 2, 3]):
                 self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
                 self.contacts[i_foot].setRegularizationTaskWeightVector(
-                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
+                    np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)"""
+
+        for j, i_foot in enumerate([0, 1, 2, 3]):
+            self.contacts[i_foot].setForceReference(self.w_reg_f * np.matrix(mpc.f_applied[3*j:3*(j+1)]).T)
+            self.contacts[i_foot].setRegularizationTaskWeightVector(
+                np.matrix([self.w_reg_f, self.w_reg_f, self.w_reg_f]).T)
 
         ################
         # UPDATE TASKS #
@@ -503,7 +511,7 @@ class controller:
                                             R[1, 0], R[1, 1], R[1, 2], R[2, 0], R[2, 1], R[2, 2]]).T,)
             self.trunkTask.setReference(self.sampleTrunk)"""
 
-        if k_simu >= 0:
+        if False:  # k_simu >= 0:
             if k_loop == 0:  # Start swing phase
 
                 # Update active feet pair
@@ -597,7 +605,7 @@ class controller:
         # Torques, accelerations, velocities and configuration computation
         tau_ff = self.invdyn.getActuatorForces(self.sol)
         self.fc = self.invdyn.getContactForces(self.sol)
-        print(k_simu, " : ", self.fc.transpose())
+        #print(k_simu, " : ", self.fc.transpose())
         # print(self.fc.transpose())
         self.ades = self.invdyn.getAccelerations(self.sol)
         self.vtsid += self.ades * dt
@@ -675,13 +683,13 @@ class controller:
                     solo.viewer.gui.setCurveLineWidth("world/force_curve"+str(i), 8.0)
                     solo.viewer.gui.setColor("world/force_curve"+str(i), [1.0, 0.0, 0.0, 0.5])
             else:
-                if self.pair == 1:
+                """if self.pair == 1:
                     feet = [1, 2]
                     feet_0 = [0, 3]
                 else:
                     feet = [0, 3]
-                    feet_0 = [1, 2]
-
+                    feet_0 = [1, 2]"""
+                feet = [0, 1, 2, 3]
                 for i, i_foot in enumerate(feet):
                     Kreduce = 0.04
                     solo.viewer.gui.setCurvePoints("world/force_curve"+str(i_foot),
@@ -690,9 +698,9 @@ class controller:
                                                     [self.memory_contacts[0, i_foot] + Kreduce * self.fc[3*i+0, 0],
                                                      self.memory_contacts[1, i_foot] + Kreduce * self.fc[3*i+1, 0],
                                                      Kreduce * self.fc[3*i+2, 0]]])
-                for i, i_foot in enumerate(feet_0):
+                """for i, i_foot in enumerate(feet_0):
                     solo.viewer.gui.setCurvePoints("world/force_curve"+str(i_foot),
-                                                   [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+                                                   [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])"""
 
             """if (t == 0):
                 solo.viewer.gui.addCurve("world/orientation_curve",
@@ -732,6 +740,14 @@ class controller:
         # Log position of the base
         pos_trunk = self.robot.framePosition(self.invdyn.data(), self.model.getFrameId("base_link"))
         self.b_pos[k_simu:(k_simu+1), 0:3] = pos_trunk.translation[0:3].transpose()
+
+        # Log position and reference of the CoM
+        com_ref = self.robot.com(self.invdyn.data())
+        self.trajCom = tsid.TrajectoryEuclidianConstant("traj_com", com_ref)
+        sample_com = self.trajCom.computeNext()
+
+        self.com_pos_ref[k_simu:(k_simu+1), 0:3] = sample_com.pos().transpose()
+        self.com_pos[k_simu:(k_simu+1), 0:3] = self.robot.com(self.invdyn.data()).transpose()
 
 # Parameters for the controller
 

@@ -98,7 +98,7 @@ mySafetyController = Safety_controller.controller_12dof()
 myEmergencyStop = EmergencyStop_controller.controller_12dof()
 myForceMonitor = ForceMonitor.ForceMonitor(p, pyb_sim.robotId, pyb_sim.planeId)
 
-for k in range(int(N_SIMULATION)):
+for k in range(800):  # int(N_SIMULATION)):
 
     #####################
     #   MPC FUNCTIONS   #
@@ -113,13 +113,15 @@ for k in range(int(N_SIMULATION)):
         RPY = utils.rotationMatrixToEulerAngles(myController.robot.framePosition(
             myController.invdyn.data(), myController.model.getFrameId("base_link")).rotation)
         """settings.qu_m[2] = myController.robot.framePosition(
-            myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]"""
+                myController.invdyn.data(), myController.model.getFrameId("base_link")).translation[2, 0]"""
         settings.qu_m[2] = myController.robot.com(myController.invdyn.data())[2]
         # RPY[1] *= -1  # Pitch is inversed
         settings.qu_m[3:, 0] = RPY
         settings.qu_m[0:2, 0] = np.array([0.0, 0.0])
         settings.qu_m[5, 0] = 0.0
         settings.vu_m = myController.vtsid[:6, 0:1]
+        if k == 10:
+            settings.vu_m[0, 0] += 0.1
         # settings.vu_m[4] *= -1  # Pitch is inversed
     else:
         debug = 1
@@ -152,8 +154,9 @@ for k in range(int(N_SIMULATION)):
     settings.t = settings.dt * k
     if k == 0:
         settings.S = footSequence(settings.t, settings.dt, settings.T_gait, settings.phases)
-    else:
-        settings.S = np.vstack((settings.S[1:, :], settings.S[0:1, :]))
+        settings.S = np.ones(settings.S.shape)
+    """else:
+        settings.S = np.vstack((settings.S[1:, :], settings.S[0:1, :]))"""
 
     ########################
     #  FOOTHOLDS LOCATION  #
@@ -178,7 +181,7 @@ for k in range(int(N_SIMULATION)):
                                       settings.dt, settings.T_gait - settings.t_stance, settings.q_w)
 
     # Get number of feet in contact with the ground for each step of the gait sequence
-    settings.n_contacts = np.sum(settings.S, axis=1).astype(int)
+    settings.n_contacts = np.matrix(np.sum(settings.S, axis=1).astype(int)).T  # np.sum(settings.S, axis=1).astype(int)
 
     #########
     #  MPC  #
@@ -271,8 +274,8 @@ for k in range(int(N_SIMULATION)):
     settings.qu_m[[2, 3, 4]] = mpc.qu[[2, 3, 4]]  # coordinate in x, y, yaw is always 0 in local frame
     settings.vu_m = mpc.vu
 
-    print(mpc.f_applied)
-    print("END OF MPC ITERATION")
+    # print(mpc.f_applied)
+    #print("END OF MPC ITERATION")
 
     for i in range(1):
 
@@ -317,7 +320,7 @@ for k in range(int(N_SIMULATION)):
                                       controlMode=pyb.TORQUE_CONTROL, forces=jointTorques)
 
         # Compute one step of simulation
-        pyb.stepSimulation()
+        # pyb.stepSimulation()
 
         # Time incrementation
         t += dt
@@ -374,7 +377,7 @@ if hasattr(myController, 'com_pos_ref'):
         plt.subplot(3, 1, i+1)
         plt.plot(myController.com_pos_ref[:, i], "b", linewidth=2)
         plt.plot(myController.com_pos[:, i], "r", linewidth=2)
-        plt.legend(["Ref pos along " + l_str[0], "Pos along " + l_str[0]])
+        plt.legend(["COM Ref pos along " + l_str[0], "Pos along " + l_str[0]])
 
 
 plt.show()

@@ -317,7 +317,7 @@ class MpcSolver:
             B_data = np.array([], dtype=np.float64)
 
             # Position of footholds in the global frame
-            pos_contacts = footholds_m[:, (settings.S[i, :] == 1).getA()[0, :]]
+            pos_contacts = footholds_m[:, (settings.S[i, :] == 1)]  #  .getA()[0, :]]
             # print(pos_contacts)
             # For each foothold during this timestep
             """for j in range(nb_contacts):

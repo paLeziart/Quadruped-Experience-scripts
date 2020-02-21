@@ -113,7 +113,7 @@ class FootstepPlanner:
 
         # Time remaining before the end of the currrent swing phase
         t_remaining = np.zeros((1, 4))
-        for i in range(4):
+        """for i in range(4):
             indexes_stance = (np.where(S[:, i] == True))[0]
             indexes_swing = (np.where(S[:, i] == False))[0]
             # index = (np.where(S[:, i] == True))[0][0]
@@ -121,14 +121,14 @@ class FootstepPlanner:
                 t_remaining[0, i] = T
             else:
                 index = (indexes_stance[indexes_stance > indexes_swing[0]])[0]
-                t_remaining[0, i] = index * self.dt
+                t_remaining[0, i] = index * self.dt"""
 
         # Add velocity forecast
         #  p += np.tile(v[0:2, 0:1], (1, 4)) * t_remaining
-        for i in range(4):
+        """for i in range(4):
             yaw = np.linspace(0, t_remaining[0, i]-self.dt, np.floor(t_remaining[0, i]/self.dt)) * vel_cur[5, 0]
             p[0, i] += (self.dt * np.cumsum(vel_cur[0, 0] * np.cos(yaw) - vel_cur[1, 0] * np.sin(yaw)))[-1]
-            p[1, i] += (self.dt * np.cumsum(vel_cur[0, 0] * np.sin(yaw) + vel_cur[1, 0] * np.cos(yaw)))[-1]
+            p[1, i] += (self.dt * np.cumsum(vel_cur[0, 0] * np.sin(yaw) + vel_cur[1, 0] * np.cos(yaw)))[-1]"""
 
         # Update target_footholds_no_lock
         self.footsteps = p
